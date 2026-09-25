@@ -1,26 +1,30 @@
 /**
- * Central Indeed MCP Service Layer & Client Registry
- * Manages Indeed MCP client connection, tool discovery, fallback routing, and health check.
+ * Central Google Jobs Service Layer & Client Registry
+ * Communicates with SerpApi Google Jobs endpoint:
+ * https://serpapi.com/search?engine=google_jobs
+ * with automatic fallback to benchmark dataset when offline or key not provided.
  */
 
 import fs from 'fs';
-import { McpClient } from './client.ts';
+import { GoogleJobsClient } from './client.ts';
 import { McpServerHealth, JobListing } from './types.ts';
-import { LocalMcpFallbackEngine, INDEED_TOOL_SCHEMAS } from './local-provider.ts';
+import { LocalMcpFallbackEngine, GOOGLE_JOBS_TOOL_SCHEMAS } from './local-provider.ts';
+
+const DEFAULT_SERPAPI_GOOGLE_JOBS_URL = 'https://serpapi.com/search?engine=google_jobs';
 
 export class McpRegistry {
-  private indeedClient: McpClient;
+  private jobsClient: GoogleJobsClient;
   private allowLocalFallback: boolean;
 
   constructor() {
     this.allowLocalFallback = process.env.MCP_ENABLE_LOCAL_SIMULATION !== 'false';
 
-    this.indeedClient = new McpClient({
-      id: 'indeed-mcp',
-      name: 'Indeed Job Search MCP',
+    this.jobsClient = new GoogleJobsClient({
+      id: 'google-jobs-serpapi',
+      name: 'Google Jobs (SerpApi)',
       category: 'jobs',
-      endpointUrl: process.env.MCP_INDEED_URL || process.env.INDEED_MCP_URL || '',
-      timeoutMs: 8000,
+      endpointUrl: process.env.GOOGLE_JOBS_URL || process.env.SERPAPI_URL || DEFAULT_SERPAPI_GOOGLE_JOBS_URL,
+      timeoutMs: 9000,
     });
 
     this.syncEnvironment();
@@ -43,29 +47,25 @@ export class McpRegistry {
     }
 
     const rawUrl =
-      process.env.MCP_INDEED_URL ||
-      process.env.INDEED_MCP_URL ||
-      process.env.mcp_indeed_url ||
-      '';
+      process.env.GOOGLE_JOBS_URL ||
+      process.env.SERPAPI_URL ||
+      process.env.SERP_API_URL ||
+      DEFAULT_SERPAPI_GOOGLE_JOBS_URL;
 
     let apiKey =
-      process.env.MCP_INDEED_API_KEY ||
-      process.env.INDEED_API_KEY ||
-      process.env.MCP_INDEED_KEY ||
-      process.env.HASDATA_API_KEY ||
-      process.env.MCP_API_KEY ||
-      process.env.MCP_AI_HR_API_KEY ||
+      process.env.SERPAPI_API_KEY ||
+      process.env.SERP_API_KEY ||
+      process.env.SERPAPI_KEY ||
+      process.env.GOOGLE_JOBS_API_KEY ||
       undefined;
 
     if (rawUrl) {
       try {
         const parsed = new URL(rawUrl);
         const keyInParam =
-          parsed.searchParams.get('apiKey') ||
           parsed.searchParams.get('api_key') ||
-          parsed.searchParams.get('x-api-key') ||
-          parsed.searchParams.get('key') ||
-          parsed.searchParams.get('token');
+          parsed.searchParams.get('apiKey') ||
+          parsed.searchParams.get('key');
         if (keyInParam && !apiKey) {
           apiKey = keyInParam;
         }
@@ -74,9 +74,7 @@ export class McpRegistry {
       }
     }
 
-    if (rawUrl) {
-      this.indeedClient.updateEndpoint(rawUrl, apiKey);
-    }
+    this.jobsClient.updateEndpoint(rawUrl, apiKey);
   }
 
   public setLocalFallbackAllowed(allowed: boolean) {
@@ -88,7 +86,7 @@ export class McpRegistry {
   }
 
   /**
-   * Health status check for Indeed MCP server
+   * Health status check for Google Jobs endpoint
    */
   public async getHealthStatus(): Promise<{
     server: McpServerHealth;
@@ -97,7 +95,7 @@ export class McpRegistry {
     timestamp: string;
   }> {
     this.syncEnvironment();
-    const rawHealth = await this.indeedClient.checkHealth();
+    const rawHealth = await this.jobsClient.checkHealth();
 
     let serverHealth: McpServerHealth;
 
@@ -108,10 +106,10 @@ export class McpRegistry {
         ...rawHealth,
         status: 'simulated',
         reachable: true,
-        discoveredTools: INDEED_TOOL_SCHEMAS,
+        discoveredTools: GOOGLE_JOBS_TOOL_SCHEMAS,
         errorMessage: rawHealth.errorMessage
-          ? `Remote endpoint unreachable (${rawHealth.errorMessage}). Serving via local Indeed fallback dataset.`
-          : 'Remote endpoint not configured. Operating in local Indeed benchmark mode.',
+          ? `Remote SerpApi Google Jobs endpoint (${rawHealth.errorMessage}). Serving via local benchmark provider.`
+          : 'Remote SerpApi key not configured. Operating in local Google Jobs benchmark mode.',
       };
     } else {
       serverHealth = rawHealth;
@@ -126,7 +124,7 @@ export class McpRegistry {
   }
 
   /**
-   * Search jobs via Indeed MCP
+   * Search jobs via Google Jobs SerpApi
    */
   public async searchJobs(params: {
     keywords?: string;
@@ -136,75 +134,41 @@ export class McpRegistry {
     minSalary?: number;
   }): Promise<{ jobs: JobListing[]; source: string; warning?: string }> {
     this.syncEnvironment();
-    // Attempt remote Indeed MCP tool call if connected
-    if (this.indeedClient.getLastHealth().status === 'connected') {
-      try {
-        const remoteTools = this.indeedClient.getDiscoveredTools();
-        const searchTool = remoteTools.find(
-          (t) =>
-            t.name.toLowerCase().includes('search') ||
-            t.name.toLowerCase().includes('job') ||
-            t.name === 'indeed_search_jobs',
-        );
 
-        if (searchTool) {
-          const result = await this.indeedClient.callTool(searchTool.name, params);
-          if (Array.isArray(result)) {
-            return { jobs: result, source: 'Indeed MCP (Remote)' };
-          }
-          if (result && Array.isArray(result.jobs)) {
-            return { jobs: result.jobs, source: 'Indeed MCP (Remote)' };
-          }
-        }
-      } catch (err: any) {
-        console.warn('[MCP] Indeed remote search error, falling back:', err.message);
+    try {
+      const results = await this.jobsClient.searchGoogleJobs(params);
+      if (results && results.length > 0) {
+        return {
+          jobs: results,
+          source: 'Google Jobs via SerpApi',
+        };
       }
+    } catch (err: any) {
+      console.warn('[Google Jobs] Remote search failed, checking fallback:', err.message);
     }
 
     if (!this.allowLocalFallback) {
       throw new Error(
-        'Indeed MCP server is currently unavailable and local fallback is disabled. Please verify MCP_INDEED_URL configuration.',
+        'Google Jobs SerpApi service is currently unavailable and local fallback is disabled. Please verify SERPAPI_API_KEY.',
       );
     }
 
     const localJobs = await LocalMcpFallbackEngine.searchJobs(params);
     return {
       jobs: localJobs,
-      source: 'Indeed MCP',
+      source: 'Google Jobs (Benchmark Fallback)',
       warning:
-        this.indeedClient.getLastHealth().status !== 'connected'
-          ? 'Live Indeed MCP endpoint is offline. Showing verified benchmark listings from Indeed MCP local provider.'
-          : undefined,
+        'Live SerpApi Google Jobs API key is not configured or query limit reached. Showing verified benchmark listings.',
     };
   }
 
   /**
-   * Get job details by ID via Indeed MCP
+   * Get job details by ID
    */
   public async getJobDetails(jobId: string): Promise<{ job: JobListing | null; source: string }> {
     this.syncEnvironment();
-    if (this.indeedClient.getLastHealth().status === 'connected') {
-      try {
-        const remoteTools = this.indeedClient.getDiscoveredTools();
-        const detailsTool = remoteTools.find(
-          (t) =>
-            t.name.toLowerCase().includes('detail') ||
-            t.name === 'indeed_get_job_details',
-        );
-
-        if (detailsTool) {
-          const result = await this.indeedClient.callTool(detailsTool.name, { jobId });
-          if (result && result.title) {
-            return { job: result, source: 'Indeed MCP (Remote)' };
-          }
-        }
-      } catch (err: any) {
-        console.warn('[MCP] Indeed remote get job details error:', err.message);
-      }
-    }
-
     const localJob = await LocalMcpFallbackEngine.getJobDetails(jobId);
-    return { job: localJob, source: 'Indeed MCP' };
+    return { job: localJob, source: 'Google Jobs' };
   }
 }
 

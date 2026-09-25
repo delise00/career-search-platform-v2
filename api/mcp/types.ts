@@ -1,5 +1,5 @@
 /**
- * Types and interfaces for the Indeed MCP Job Search Platform
+ * Types and interfaces for the Google Jobs Search Platform
  */
 
 export interface McpToolSchema {
@@ -45,6 +45,7 @@ export interface JobListing {
   industry: string;
   postedDate: string;
   source: string;
+  applyLink?: string;
 }
 
 export interface SavedJobItem {

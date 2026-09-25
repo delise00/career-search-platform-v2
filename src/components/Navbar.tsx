@@ -31,10 +31,10 @@ export const Navbar: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <span className="font-bold text-lg tracking-tight text-white">Job Search</span>
                 <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">
-                  Indeed MCP
+                  Google Jobs
                 </span>
               </div>
-              <p className="text-xs text-slate-400">Model Context Protocol Job Finder</p>
+              <p className="text-xs text-slate-400">Powered by SerpApi Google Jobs Engine</p>
             </div>
           </div>
 
@@ -70,12 +70,12 @@ export const Navbar: React.FC = () => {
             </button>
           </nav>
 
-          {/* Developer Indeed MCP Health Indicator */}
+          {/* Status Indicator */}
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setIsMcpModalOpen(true)}
               className="flex items-center space-x-2 px-3 py-1.5 rounded-lg border text-xs font-mono transition-all bg-slate-950/80 border-slate-800 hover:border-slate-700 text-slate-300"
-              title="Click to inspect Indeed MCP connection & tool discovery"
+              title="Click to inspect Google Jobs SerpApi connection"
             >
               <Server className="w-3.5 h-3.5 text-slate-400" />
               <div className="flex items-center space-x-1.5">
@@ -93,10 +93,10 @@ export const Navbar: React.FC = () => {
                 </span>
                 <span className="hidden sm:inline">
                   {isConnected
-                    ? 'Indeed MCP: Live'
+                    ? 'Google Jobs: Live'
                     : isSimulated
-                    ? 'Indeed MCP: Local'
-                    : 'Indeed MCP: Offline'}
+                    ? 'Google Jobs: Fallback'
+                    : 'Google Jobs: Offline'}
                 </span>
               </div>
               <Activity className={`w-3 h-3 text-slate-500 ${isHealthChecking ? 'animate-spin' : ''}`} />

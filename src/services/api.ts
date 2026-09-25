@@ -1,5 +1,5 @@
 /**
- * Client API Service communicating with the server-side Indeed MCP endpoints
+ * Client API Service communicating with the server-side Google Jobs SerpApi endpoints
  */
 
 import { JobListing, McpOverallHealth } from '../types.ts';
@@ -19,11 +19,11 @@ async function safeJsonFetch(url: string, options?: RequestInit): Promise<any> {
 
 export const api = {
   /**
-   * Fetch developer Indeed MCP health status
+   * Fetch Google Jobs health status
    */
   async getMcpHealth(): Promise<McpOverallHealth> {
     const { ok, json } = await safeJsonFetch('/api/mcp/health');
-    if (!ok || !json.success) throw new Error(json?.error || 'Failed to fetch Indeed MCP health');
+    if (!ok || !json.success) throw new Error(json?.error || 'Failed to fetch Google Jobs health');
     return json.data;
   },
 
@@ -41,7 +41,7 @@ export const api = {
   },
 
   /**
-   * Search jobs via Indeed MCP
+   * Search jobs via Google Jobs
    */
   async searchJobs(params: {
     keywords?: string;
@@ -58,13 +58,13 @@ export const api = {
     if (!ok || !json.success) throw new Error(json?.error || 'Failed to search jobs');
     return {
       jobs: json.data || [],
-      source: json.source || 'Indeed MCP',
+      source: json.source || 'Google Jobs',
       warning: json.warning,
     };
   },
 
   /**
-   * Get job details via Indeed MCP
+   * Get job details
    */
   async getJobDetails(jobId: string): Promise<JobListing> {
     const { ok, json } = await safeJsonFetch(`/api/jobs/${encodeURIComponent(jobId)}`);
@@ -72,4 +72,3 @@ export const api = {
     return json.data;
   },
 };
-

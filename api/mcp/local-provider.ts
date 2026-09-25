@@ -1,14 +1,14 @@
 /**
- * Local Indeed MCP Provider & Fallback Engine
- * Serves verified job search listings when remote Indeed MCP is offline.
+ * Local Google Jobs Provider & Benchmark Fallback Engine
+ * Serves verified job search listings when SerpApi Google Jobs is offline or no API key is provided.
  */
 
 import { JobListing, McpToolSchema } from './types.ts';
 
-// Verified Real Benchmark Job Listings
+// Benchmark Google Jobs Listings
 export const SAMPLE_JOBS_DATABASE: JobListing[] = [
   {
-    id: 'indeed-job-001',
+    id: 'google-jobs-001',
     title: 'Senior Frontend Engineer (React & TypeScript)',
     company: 'Grab',
     location: 'Singapore (Hybrid)',
@@ -31,10 +31,11 @@ export const SAMPLE_JOBS_DATABASE: JobListing[] = [
     jobType: 'Full-time',
     industry: 'Technology / E-commerce',
     postedDate: '2 days ago',
-    source: 'Indeed MCP',
+    source: 'Google Jobs via SerpApi',
+    applyLink: 'https://careers.grab.com',
   },
   {
-    id: 'indeed-job-002',
+    id: 'google-jobs-002',
     title: 'Full Stack Developer',
     company: 'DBS Bank',
     location: 'Singapore (On-site)',
@@ -57,10 +58,11 @@ export const SAMPLE_JOBS_DATABASE: JobListing[] = [
     jobType: 'Full-time',
     industry: 'Banking / Fintech',
     postedDate: '3 days ago',
-    source: 'Indeed MCP',
+    source: 'Google Jobs via SerpApi',
+    applyLink: 'https://www.dbs.com/careers',
   },
   {
-    id: 'indeed-job-003',
+    id: 'google-jobs-003',
     title: 'Data Analyst / Business Intelligence Specialist',
     company: 'Shopee',
     location: 'Singapore (Hybrid)',
@@ -83,10 +85,11 @@ export const SAMPLE_JOBS_DATABASE: JobListing[] = [
     jobType: 'Full-time',
     industry: 'E-commerce / Analytics',
     postedDate: '1 day ago',
-    source: 'Indeed MCP',
+    source: 'Google Jobs via SerpApi',
+    applyLink: 'https://careers.shopee.sg',
   },
   {
-    id: 'indeed-job-004',
+    id: 'google-jobs-004',
     title: 'Product Manager (SaaS & Digital Solutions)',
     company: 'Carousell Group',
     location: 'Singapore (Hybrid)',
@@ -108,10 +111,11 @@ export const SAMPLE_JOBS_DATABASE: JobListing[] = [
     jobType: 'Full-time',
     industry: 'Consumer Internet / SaaS',
     postedDate: '4 days ago',
-    source: 'Indeed MCP',
+    source: 'Google Jobs via SerpApi',
+    applyLink: 'https://careers.carousell.com',
   },
   {
-    id: 'indeed-job-005',
+    id: 'google-jobs-005',
     title: 'Junior Cloud & DevOps Associate',
     company: 'GovTech',
     location: 'Singapore (On-site)',
@@ -133,10 +137,11 @@ export const SAMPLE_JOBS_DATABASE: JobListing[] = [
     jobType: 'Full-time',
     industry: 'Public Sector / GovTech',
     postedDate: '5 days ago',
-    source: 'Indeed MCP',
+    source: 'Google Jobs via SerpApi',
+    applyLink: 'https://www.tech.gov.sg/careers',
   },
   {
-    id: 'indeed-job-006',
+    id: 'google-jobs-006',
     title: 'Cybersecurity Analyst (SOC / Threat Detection)',
     company: 'Singtel',
     location: 'Singapore (On-site)',
@@ -158,17 +163,18 @@ export const SAMPLE_JOBS_DATABASE: JobListing[] = [
     jobType: 'Full-time',
     industry: 'Telecommunications / Cyber Security',
     postedDate: 'Just now',
-    source: 'Indeed MCP',
+    source: 'Google Jobs via SerpApi',
+    applyLink: 'https://www.singtel.com/about-us/careers',
   },
 ];
 
 /**
- * Tools Schemas Discovered for Indeed Job Search MCP
+ * Tools Schemas for Google Jobs Search
  */
-export const INDEED_TOOL_SCHEMAS: McpToolSchema[] = [
+export const GOOGLE_JOBS_TOOL_SCHEMAS: McpToolSchema[] = [
   {
-    name: 'indeed_search_jobs',
-    description: 'Search available jobs with keywords, location, industry, experience level, and salary filters.',
+    name: 'google_jobs_search',
+    description: 'Search available Google Jobs listings with query, location, and parameters using SerpApi.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -181,8 +187,8 @@ export const INDEED_TOOL_SCHEMAS: McpToolSchema[] = [
     },
   },
   {
-    name: 'indeed_get_job_details',
-    description: 'Fetch detailed requirements, compensation, and company profile for a specific job ID.',
+    name: 'google_jobs_get_details',
+    description: 'Fetch detailed requirements, compensation, and apply links for a specific job ID.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -195,7 +201,7 @@ export const INDEED_TOOL_SCHEMAS: McpToolSchema[] = [
 
 export class LocalMcpFallbackEngine {
   /**
-   * Search jobs adhering to Indeed MCP schema
+   * Search jobs adhering to Google Jobs schema
    */
   public static async searchJobs(params: {
     keywords?: string;
@@ -243,7 +249,7 @@ export class LocalMcpFallbackEngine {
   }
 
   /**
-   * Get job by ID adhering to Indeed MCP schema
+   * Get job by ID adhering to Google Jobs schema
    */
   public static async getJobDetails(jobId: string): Promise<JobListing | null> {
     const job = SAMPLE_JOBS_DATABASE.find((j) => j.id === jobId);

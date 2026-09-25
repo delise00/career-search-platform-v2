@@ -1,5 +1,5 @@
 /**
- * Frontend Types for Indeed Job Search Platform
+ * Frontend Types for Google Jobs Search Platform
  */
 
 export interface JobListing {
@@ -21,6 +21,7 @@ export interface JobListing {
   industry: string;
   postedDate: string;
   source: string;
+  applyLink?: string;
 }
 
 export interface McpToolSchema {

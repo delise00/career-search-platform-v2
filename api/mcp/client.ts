@@ -1,10 +1,12 @@
 /**
- * JSON-RPC 2.0 Client for Model Context Protocol (MCP) Servers
+ * Client for Google Jobs via SerpApi (https://serpapi.com/search?engine=google_jobs)
+ * or MCP endpoints.
  */
 
-import { McpToolSchema, McpServerHealth } from './types.ts';
+import { JobListing, McpServerHealth, McpToolSchema } from './types.ts';
+import { GOOGLE_JOBS_TOOL_SCHEMAS } from './local-provider.ts';
 
-export interface McpClientOptions {
+export interface GoogleJobsClientOptions {
   id: string;
   name: string;
   category?: 'jobs';
@@ -13,24 +15,22 @@ export interface McpClientOptions {
   timeoutMs?: number;
 }
 
-export class McpClient {
+export class GoogleJobsClient {
   public readonly id: string;
   public readonly name: string;
   public readonly category: 'jobs';
   private endpointUrl: string;
   private apiKey?: string;
   private timeoutMs: number;
-  private requestId = 0;
-  private discoveredTools: McpToolSchema[] = [];
   private lastHealthCheck: McpServerHealth;
 
-  constructor(options: McpClientOptions) {
+  constructor(options: GoogleJobsClientOptions) {
     this.id = options.id;
     this.name = options.name;
     this.category = options.category || 'jobs';
     this.endpointUrl = options.endpointUrl;
     this.apiKey = options.apiKey;
-    this.timeoutMs = options.timeoutMs || 6000;
+    this.timeoutMs = options.timeoutMs || 8000;
 
     this.lastHealthCheck = {
       id: this.id,
@@ -41,7 +41,7 @@ export class McpClient {
       status: 'disconnected',
       latencyMs: 0,
       lastPing: new Date().toISOString(),
-      discoveredTools: [],
+      discoveredTools: GOOGLE_JOBS_TOOL_SCHEMAS,
       errorMessage: 'Not initialized yet',
     };
   }
@@ -52,12 +52,12 @@ export class McpClient {
     this.lastHealthCheck.endpoint = this.maskEndpoint(this.endpointUrl);
   }
 
-  public getDiscoveredTools(): McpToolSchema[] {
-    return this.discoveredTools;
-  }
-
   public getLastHealth(): McpServerHealth {
     return this.lastHealthCheck;
+  }
+
+  public getDiscoveredTools(): McpToolSchema[] {
+    return GOOGLE_JOBS_TOOL_SCHEMAS;
   }
 
   private maskEndpoint(url: string): string {
@@ -71,93 +71,7 @@ export class McpClient {
   }
 
   /**
-   * Send JSON-RPC 2.0 message to the remote MCP server
-   */
-  private async sendJsonRpc(method: string, params: Record<string, any> = {}): Promise<any> {
-    if (!this.endpointUrl || !this.endpointUrl.startsWith('http')) {
-      throw new Error(`MCP Server "${this.name}" endpoint URL is not configured or invalid.`);
-    }
-
-    const currentId = ++this.requestId;
-    const body = {
-      jsonrpc: '2.0',
-      id: currentId,
-      method,
-      params,
-    };
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json, text/event-stream',
-      'User-Agent': 'CareerNavigator-MCP-Client/1.0',
-    };
-
-    if (this.apiKey) {
-      headers['Authorization'] = `Bearer ${this.apiKey}`;
-      headers['x-api-key'] = this.apiKey;
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
-
-    try {
-      const response = await fetch(this.endpointUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status} from MCP Server: ${response.statusText}`);
-      }
-
-      const contentType = response.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const json = await response.json();
-        if (json.error) {
-          throw new Error(`MCP JSON-RPC Error [${json.error.code}]: ${json.error.message}`);
-        }
-        return json.result;
-      }
-
-      // Handle SSE response if server responded as stream
-      const text = await response.text();
-      try {
-        const json = JSON.parse(text);
-        if (json.error) throw new Error(json.error.message);
-        return json.result;
-      } catch {
-        // Parse SSE data: lines
-        const lines = text.split('\n');
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const dataStr = line.slice(6).trim();
-            if (dataStr) {
-              const parsed = JSON.parse(dataStr);
-              if (parsed.result) return parsed.result;
-              if (parsed.error) throw new Error(parsed.error.message);
-            }
-          }
-        }
-        throw new Error('Invalid response format received from MCP server.');
-      }
-    } catch (err: any) {
-      clearTimeout(timeoutId);
-      if (err.name === 'AbortError') {
-        throw new Error(`Timeout after ${this.timeoutMs}ms connecting to MCP server ${this.name}`);
-      }
-      throw err;
-    }
-  }
-
-  /**
-   * Performs an MCP handshake and tools discovery:
-   * 1. initialize
-   * 2. notifications/initialized
-   * 3. tools/list
+   * Health ping to the SerpApi Google Jobs endpoint
    */
   public async checkHealth(): Promise<McpServerHealth> {
     const startTime = Date.now();
@@ -168,49 +82,85 @@ export class McpClient {
         id: this.id,
         name: this.name,
         category: this.category,
-        endpoint: 'Not configured (check environment variables)',
+        endpoint: 'Not configured',
         reachable: false,
         status: 'disconnected',
         latencyMs: 0,
         lastPing: nowIso,
-        discoveredTools: [],
-        errorMessage: `Endpoint URL for ${this.name} is not set.`,
+        discoveredTools: GOOGLE_JOBS_TOOL_SCHEMAS,
+        errorMessage: 'Endpoint URL is not set.',
       };
       return this.lastHealthCheck;
     }
 
     try {
-      // 1. Initialize
-      const initResult = await this.sendJsonRpc('initialize', {
-        protocolVersion: '2024-11-05',
-        capabilities: {
-          tools: { listChanged: true },
-        },
-        clientInfo: {
-          name: 'CareerNavigatorClient',
-          version: '1.0.0',
-        },
-      });
-
-      const protocolVersion = initResult?.protocolVersion || '2024-11-05';
-
-      // 2. Discover Tools
-      let tools: McpToolSchema[] = [];
-      try {
-        const listResult = await this.sendJsonRpc('tools/list', {});
-        if (listResult && Array.isArray(listResult.tools)) {
-          tools = listResult.tools.map((t: any) => ({
-            name: t.name,
-            description: t.description || '',
-            inputSchema: t.inputSchema,
-          }));
-        }
-      } catch (toolErr: any) {
-        console.warn(`[MCP:${this.name}] tools/list error:`, toolErr.message);
+      const targetUrl = new URL(this.endpointUrl);
+      if (this.apiKey && !targetUrl.searchParams.has('api_key')) {
+        targetUrl.searchParams.set('api_key', this.apiKey);
+      }
+      if (!targetUrl.searchParams.has('engine')) {
+        targetUrl.searchParams.set('engine', 'google_jobs');
+      }
+      // Send a lightweight test query
+      if (!targetUrl.searchParams.has('q')) {
+        targetUrl.searchParams.set('q', 'developer');
       }
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+
+      const res = await fetch(targetUrl.toString(), {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'CareerNavigator/2.0',
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
       const latencyMs = Date.now() - startTime;
-      this.discoveredTools = tools;
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        let message = `HTTP ${res.status}: ${res.statusText}`;
+        try {
+          const parsed = JSON.parse(errorText);
+          if (parsed.error) message = parsed.error;
+        } catch {
+          // ignore
+        }
+        this.lastHealthCheck = {
+          id: this.id,
+          name: this.name,
+          category: this.category,
+          endpoint: this.maskEndpoint(this.endpointUrl),
+          reachable: false,
+          status: 'error',
+          latencyMs,
+          lastPing: nowIso,
+          discoveredTools: GOOGLE_JOBS_TOOL_SCHEMAS,
+          errorMessage: message,
+        };
+        return this.lastHealthCheck;
+      }
+
+      const data = await res.json();
+      if (data.error) {
+        this.lastHealthCheck = {
+          id: this.id,
+          name: this.name,
+          category: this.category,
+          endpoint: this.maskEndpoint(this.endpointUrl),
+          reachable: false,
+          status: 'error',
+          latencyMs,
+          lastPing: nowIso,
+          discoveredTools: GOOGLE_JOBS_TOOL_SCHEMAS,
+          errorMessage: data.error,
+        };
+        return this.lastHealthCheck;
+      }
 
       this.lastHealthCheck = {
         id: this.id,
@@ -221,10 +171,9 @@ export class McpClient {
         status: 'connected',
         latencyMs,
         lastPing: nowIso,
-        discoveredTools: tools,
-        protocolVersion,
+        discoveredTools: GOOGLE_JOBS_TOOL_SCHEMAS,
+        protocolVersion: 'SerpApi Google Jobs',
       };
-
       return this.lastHealthCheck;
     } catch (err: any) {
       const latencyMs = Date.now() - startTime;
@@ -237,7 +186,7 @@ export class McpClient {
         status: 'error',
         latencyMs,
         lastPing: nowIso,
-        discoveredTools: this.discoveredTools,
+        discoveredTools: GOOGLE_JOBS_TOOL_SCHEMAS,
         errorMessage: err.message || 'Connection failed',
       };
       return this.lastHealthCheck;
@@ -245,27 +194,150 @@ export class McpClient {
   }
 
   /**
-   * Execute an MCP tool on the server
+   * Search jobs using Google Jobs SerpApi endpoint
    */
-  public async callTool(toolName: string, toolArguments: Record<string, any>): Promise<any> {
-    const result = await this.sendJsonRpc('tools/call', {
-      name: toolName,
-      arguments: toolArguments,
-    });
+  public async searchGoogleJobs(params: {
+    keywords?: string;
+    location?: string;
+    experienceLevel?: string;
+    industry?: string;
+    minSalary?: number;
+  }): Promise<JobListing[]> {
+    const targetUrl = new URL(this.endpointUrl);
+    targetUrl.searchParams.set('engine', 'google_jobs');
 
-    // MCP tools return { content: [ { type: "text", text: "..." } ], isError?: boolean }
-    if (result && Array.isArray(result.content)) {
-      const textItem = result.content.find((c: any) => c.type === 'text');
-      if (textItem && typeof textItem.text === 'string') {
-        try {
-          return JSON.parse(textItem.text);
-        } catch {
-          return textItem.text;
-        }
-      }
-      return result.content;
+    if (this.apiKey && !targetUrl.searchParams.has('api_key')) {
+      targetUrl.searchParams.set('api_key', this.apiKey);
     }
 
-    return result;
+    // Build query
+    const queryParts: string[] = [];
+    if (params.keywords && params.keywords.trim()) {
+      queryParts.push(params.keywords.trim());
+    } else {
+      queryParts.push('software developer');
+    }
+
+    if (params.industry && params.industry !== 'All') {
+      queryParts.push(params.industry);
+    }
+    if (params.experienceLevel && params.experienceLevel !== 'All') {
+      queryParts.push(params.experienceLevel);
+    }
+
+    targetUrl.searchParams.set('q', queryParts.join(' '));
+
+    if (params.location && params.location !== 'All') {
+      targetUrl.searchParams.set('location', params.location);
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    const res = await fetch(targetUrl.toString(), {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      const text = await res.text();
+      let errMsg = `SerpApi error HTTP ${res.status}`;
+      try {
+        const j = JSON.parse(text);
+        if (j.error) errMsg = j.error;
+      } catch {
+        // ignore
+      }
+      throw new Error(errMsg);
+    }
+
+    const data = await res.json();
+    if (data.error) {
+      throw new Error(data.error);
+    }
+
+    const rawJobs: any[] = data.jobs_results || [];
+
+    // Map SerpApi Google Jobs results to JobListing format
+    return rawJobs.map((raw: any, index: number): JobListing => {
+      const title = raw.title || 'Untitled Role';
+      const company = raw.company_name || 'Hiring Organization';
+      const location = raw.location || 'Multiple Locations';
+      const description = raw.description || '';
+      const extensions: string[] = Array.isArray(raw.detected_extensions)
+        ? Object.values(raw.detected_extensions).filter((v): v is string => typeof v === 'string')
+        : Array.isArray(raw.extensions)
+        ? raw.extensions
+        : [];
+
+      // Detect salary if present in extensions
+      let salary: JobListing['salary'] = undefined;
+      const salaryText = extensions.find((e) =>
+        e.includes('$') || e.toLowerCase().includes('salary') || e.toLowerCase().includes('a year') || e.toLowerCase().includes('an hour')
+      );
+      if (salaryText) {
+        salary = {
+          currency: 'USD',
+          period: salaryText.toLowerCase().includes('hour') ? 'hourly' : 'yearly',
+        };
+      }
+
+      // Detect posted date
+      const postedDate = extensions.find((e) => e.toLowerCase().includes('ago') || e.toLowerCase().includes('yesterday') || e.toLowerCase().includes('just')) || 'Recently posted';
+
+      // Detect job type
+      const jobTypeStr = extensions.find((e) => e.toLowerCase().includes('full-time') || e.toLowerCase().includes('part-time') || e.toLowerCase().includes('contract'));
+      const jobType: JobListing['jobType'] = jobTypeStr?.toLowerCase().includes('part') ? 'Part-time' : jobTypeStr?.toLowerCase().includes('contract') ? 'Contract' : 'Full-time';
+
+      // Parse apply link
+      const applyLink = raw.apply_options?.[0]?.link || raw.share_link || undefined;
+
+      // Extract skills / highlights
+      const skillsRequired: string[] = [];
+      if (Array.isArray(raw.job_highlights)) {
+        for (const highlight of raw.job_highlights) {
+          if (Array.isArray(highlight.items)) {
+            for (const item of highlight.items) {
+              if (item.length < 40) skillsRequired.push(item);
+            }
+          }
+        }
+      }
+      if (skillsRequired.length === 0) {
+        skillsRequired.push('Google Jobs Verified');
+      }
+
+      // Requirements from job_highlights
+      const requirements: string[] = [];
+      const qualHighlight = raw.job_highlights?.find((h: any) => h.title?.toLowerCase().includes('qualification'));
+      if (qualHighlight && Array.isArray(qualHighlight.items)) {
+        requirements.push(...qualHighlight.items);
+      }
+      if (requirements.length === 0) {
+        requirements.push('See full description for qualifications and specifications.');
+      }
+
+      return {
+        id: raw.job_id || `google-job-${index}-${Date.now()}`,
+        title,
+        company,
+        location,
+        salary,
+        description,
+        requirements,
+        skillsRequired: skillsRequired.slice(0, 8),
+        experienceLevel: params.experienceLevel && params.experienceLevel !== 'All' ? (params.experienceLevel as any) : 'Mid-Level',
+        jobType,
+        industry: params.industry && params.industry !== 'All' ? params.industry : 'Technology',
+        postedDate,
+        source: 'Google Jobs via SerpApi',
+        applyLink,
+      };
+    });
   }
 }

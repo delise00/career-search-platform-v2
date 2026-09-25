@@ -12,8 +12,8 @@ import {
   Building,
   AlertCircle,
   X,
-  Clock,
   ArrowRight,
+  ExternalLink,
 } from 'lucide-react';
 
 export const JobSearch: React.FC = () => {
@@ -23,8 +23,6 @@ export const JobSearch: React.FC = () => {
     savedJobs,
     toggleSaveJob,
     isJobSaved,
-    selectedJob,
-    setSelectedJob,
   } = useCareer();
 
   const [jobs, setJobs] = useState<JobListing[]>([]);
@@ -34,7 +32,7 @@ export const JobSearch: React.FC = () => {
   const [experienceFilter, setExperienceFilter] = useState('All');
   const [industryFilter, setIndustryFilter] = useState('All');
   const [searchWarning, setSearchWarning] = useState<string | null>(null);
-  const [searchSource, setSearchSource] = useState<string>('Indeed MCP');
+  const [searchSource, setSearchSource] = useState<string>('Google Jobs via SerpApi');
   const [activeJobModal, setActiveJobModal] = useState<JobListing | null>(null);
 
   const fetchJobs = async () => {
@@ -54,7 +52,7 @@ export const JobSearch: React.FC = () => {
         setSearchWarning(response.warning);
       }
     } catch (err: any) {
-      setSearchWarning(err.message || 'Job search service is temporarily unavailable.');
+      setSearchWarning(err.message || 'Google Jobs search is temporarily unavailable.');
       setJobs([]);
     } finally {
       setIsLoading(false);
@@ -83,7 +81,7 @@ export const JobSearch: React.FC = () => {
           <p className="text-slate-400 text-sm mt-1">
             {activeTab === 'saved'
               ? `You have bookmarked ${savedJobs.length} position${savedJobs.length === 1 ? '' : 's'}.`
-              : 'Search and filter active positions powered by Indeed MCP.'}
+              : 'Search and filter active positions powered by Google Jobs.'}
           </p>
         </div>
 
@@ -106,7 +104,7 @@ export const JobSearch: React.FC = () => {
             <span>{searchWarning}</span>
           </div>
           <span className="font-mono text-[11px] text-amber-400/80 bg-amber-900/40 px-2 py-0.5 rounded">
-            Indeed Fallback
+            Google Jobs Fallback
           </span>
         </div>
       )}
@@ -121,7 +119,7 @@ export const JobSearch: React.FC = () => {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search job title, skills (e.g. React, SQL, DevOps)..."
+                placeholder="Search Google Jobs by role, skill (e.g. React, Full Stack, Cloud, DevOps)..."
                 className="w-full bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-500 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500"
               />
             </div>
@@ -131,7 +129,7 @@ export const JobSearch: React.FC = () => {
               className="px-6 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-sm transition-all flex items-center justify-center space-x-2 shadow-md shadow-cyan-900/20 disabled:opacity-50"
             >
               <Search className="w-4 h-4" />
-              <span>{isLoading ? 'Searching...' : 'Search'}</span>
+              <span>{isLoading ? 'Searching...' : 'Search Google Jobs'}</span>
             </button>
           </form>
 
@@ -151,9 +149,10 @@ export const JobSearch: React.FC = () => {
                 className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-200 text-xs focus:outline-none focus:border-cyan-500"
               >
                 <option value="All">All Locations</option>
+                <option value="United States">United States</option>
                 <option value="Singapore">Singapore</option>
+                <option value="Remote">Remote</option>
                 <option value="Hybrid">Hybrid</option>
-                <option value="On-site">On-site</option>
               </select>
             </div>
 
@@ -181,7 +180,7 @@ export const JobSearch: React.FC = () => {
                 className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-200 text-xs focus:outline-none focus:border-cyan-500"
               >
                 <option value="All">All Industries</option>
-                <option value="Technology">Technology / E-commerce</option>
+                <option value="Technology">Technology / Software</option>
                 <option value="Banking">Banking / Fintech</option>
                 <option value="GovTech">Public Sector / GovTech</option>
                 <option value="Cyber">Cyber Security</option>
@@ -199,7 +198,7 @@ export const JobSearch: React.FC = () => {
       {isLoading ? (
         <div className="py-20 text-center space-y-3">
           <div className="w-10 h-10 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-sm text-slate-400">Querying Indeed MCP for listings...</p>
+          <p className="text-sm text-slate-400">Searching Google Jobs via SerpApi...</p>
         </div>
       ) : displayedJobs.length === 0 ? (
         <div className="py-16 text-center bg-slate-900/50 rounded-2xl border border-slate-800 p-8 space-y-3">
@@ -286,8 +285,9 @@ export const JobSearch: React.FC = () => {
                       <div className="flex items-center space-x-1.5 text-emerald-400 font-mono text-[11px]">
                         <DollarSign className="w-3.5 h-3.5" />
                         <span>
-                          {job.salary.currency} {job.salary.min?.toLocaleString()} -{' '}
-                          {job.salary.max?.toLocaleString()} / {job.salary.period}
+                          {job.salary.currency} {job.salary.min ? `${job.salary.min.toLocaleString()} - ` : ''}
+                          {job.salary.max ? `${job.salary.max.toLocaleString()} ` : ''}
+                          {job.salary.period ? `/ ${job.salary.period}` : 'Competitive'}
                         </span>
                       </div>
                     )}
@@ -319,13 +319,26 @@ export const JobSearch: React.FC = () => {
                 {/* Footer action */}
                 <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
                   <span className="text-slate-500 text-[11px] font-mono">{job.postedDate}</span>
-                  <button
-                    onClick={() => setActiveJobModal(job)}
-                    className="flex items-center space-x-1 text-cyan-400 hover:text-cyan-300 font-medium py-1"
-                  >
-                    <span>View Details</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center space-x-2">
+                    {job.applyLink && (
+                      <a
+                        href={job.applyLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center space-x-1 text-slate-400 hover:text-white font-medium py-1 px-2 rounded hover:bg-slate-800 transition-colors"
+                      >
+                        <span>Apply</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                    <button
+                      onClick={() => setActiveJobModal(job)}
+                      className="flex items-center space-x-1 text-cyan-400 hover:text-cyan-300 font-medium py-1"
+                    >
+                      <span>Details</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -351,7 +364,7 @@ export const JobSearch: React.FC = () => {
                   <span>•</span>
                   <span className="text-emerald-400 font-mono">
                     {activeJobModal.salary
-                      ? `${activeJobModal.salary.currency} ${activeJobModal.salary.min?.toLocaleString()} - ${activeJobModal.salary.max?.toLocaleString()} / ${activeJobModal.salary.period}`
+                      ? `${activeJobModal.salary.currency} ${activeJobModal.salary.min ? `${activeJobModal.salary.min.toLocaleString()} - ` : ''}${activeJobModal.salary.max ? `${activeJobModal.salary.max.toLocaleString()} ` : ''}${activeJobModal.salary.period ? `/ ${activeJobModal.salary.period}` : ''}`
                       : 'Salary Competitive'}
                   </span>
                 </div>
@@ -370,14 +383,14 @@ export const JobSearch: React.FC = () => {
                 <h4 className="font-semibold text-slate-200 text-xs uppercase tracking-wider mb-2">
                   Role Description
                 </h4>
-                <p className="text-slate-300 leading-relaxed text-xs sm:text-sm">
+                <p className="text-slate-300 leading-relaxed text-xs sm:text-sm whitespace-pre-line">
                   {activeJobModal.description}
                 </p>
               </div>
 
               <div>
                 <h4 className="font-semibold text-slate-200 text-xs uppercase tracking-wider mb-2">
-                  Requirements &amp; Qualifications
+                  Qualifications &amp; Requirements
                 </h4>
                 <ul className="space-y-2 text-xs sm:text-sm text-slate-300">
                   {activeJobModal.requirements.map((req, idx) => (
@@ -391,7 +404,7 @@ export const JobSearch: React.FC = () => {
 
               <div>
                 <h4 className="font-semibold text-slate-200 text-xs uppercase tracking-wider mb-2">
-                  Required Competencies
+                  Key Skills &amp; Highlights
                 </h4>
                 <div className="flex flex-wrap gap-1.5">
                   {activeJobModal.skillsRequired.map((s, idx) => (
@@ -412,17 +425,30 @@ export const JobSearch: React.FC = () => {
                 Source: {activeJobModal.source}
               </span>
 
-              <button
-                onClick={() => toggleSaveJob(activeJobModal)}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-medium border transition-colors ${
-                  isJobSaved(activeJobModal.id)
-                    ? 'bg-cyan-950/80 text-cyan-300 border-cyan-800'
-                    : 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
-                }`}
-              >
-                <Bookmark className="w-4 h-4" fill={isJobSaved(activeJobModal.id) ? 'currentColor' : 'none'} />
-                <span>{isJobSaved(activeJobModal.id) ? 'Saved' : 'Save Job'}</span>
-              </button>
+              <div className="flex items-center space-x-3">
+                {activeJobModal.applyLink && (
+                  <a
+                    href={activeJobModal.applyLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-medium bg-cyan-600 hover:bg-cyan-500 text-white transition-colors shadow-sm"
+                  >
+                    <span>Apply via Google Jobs</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
+                <button
+                  onClick={() => toggleSaveJob(activeJobModal)}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-medium border transition-colors ${
+                    isJobSaved(activeJobModal.id)
+                      ? 'bg-cyan-950/80 text-cyan-300 border-cyan-800'
+                      : 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
+                  }`}
+                >
+                  <Bookmark className="w-4 h-4" fill={isJobSaved(activeJobModal.id) ? 'currentColor' : 'none'} />
+                  <span>{isJobSaved(activeJobModal.id) ? 'Saved' : 'Save Job'}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
