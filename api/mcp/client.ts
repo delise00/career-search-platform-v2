@@ -7,7 +7,7 @@ import { McpToolSchema, McpServerHealth } from './types.ts';
 export interface McpClientOptions {
   id: string;
   name: string;
-  category: 'screening' | 'jobs' | 'coverletter';
+  category?: 'jobs';
   endpointUrl: string;
   apiKey?: string;
   timeoutMs?: number;
@@ -16,7 +16,7 @@ export interface McpClientOptions {
 export class McpClient {
   public readonly id: string;
   public readonly name: string;
-  public readonly category: 'screening' | 'jobs' | 'coverletter';
+  public readonly category: 'jobs';
   private endpointUrl: string;
   private apiKey?: string;
   private timeoutMs: number;
@@ -27,7 +27,7 @@ export class McpClient {
   constructor(options: McpClientOptions) {
     this.id = options.id;
     this.name = options.name;
-    this.category = options.category;
+    this.category = options.category || 'jobs';
     this.endpointUrl = options.endpointUrl;
     this.apiKey = options.apiKey;
     this.timeoutMs = options.timeoutMs || 6000;

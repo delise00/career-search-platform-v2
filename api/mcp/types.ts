@@ -1,15 +1,6 @@
 /**
- * Types and interfaces for the Career Navigator MCP Architecture
+ * Types and interfaces for the Indeed MCP Job Search Platform
  */
-
-export interface McpServerConfig {
-  id: string;
-  name: string;
-  description: string;
-  endpointUrl: string;
-  apiKey?: string;
-  category: 'screening' | 'jobs' | 'coverletter';
-}
 
 export interface McpToolSchema {
   name: string;
@@ -24,7 +15,7 @@ export interface McpToolSchema {
 export interface McpServerHealth {
   id: string;
   name: string;
-  category: 'screening' | 'jobs' | 'coverletter';
+  category: 'jobs';
   endpoint: string;
   reachable: boolean;
   status: 'connected' | 'simulated' | 'error' | 'disconnected';
@@ -53,116 +44,12 @@ export interface JobListing {
   jobType: 'Full-time' | 'Contract' | 'Part-time' | 'Internship' | 'Remote';
   industry: string;
   postedDate: string;
-  source: 'Indeed MCP' | 'Direct Entry';
+  source: string;
 }
 
-export interface ResumeData {
-  id?: string;
-  name: string;
-  email?: string;
-  phone?: string;
-  location?: string;
-  summary: string;
-  technicalSkills: string[];
-  softSkills: string[];
-  experiences: {
-    id: string;
-    role: string;
-    company: string;
-    period: string;
-    highlights: string[];
-  }[];
-  education: {
-    degree: string;
-    institution: string;
-    year: string;
-  }[];
-  certifications: string[];
-}
-
-export interface RequirementMatch {
-  requirement: string;
-  status: 'matched' | 'partial' | 'not_demonstrated';
-  evidence?: string;
-  reasoning: string;
-}
-
-export interface JobCompatibilityResult {
-  jobId: string;
-  overallScore: number;
-  verdict: 'High Match' | 'Moderate Match' | 'Low Match / Stretch Role';
-  matchedRequirements: RequirementMatch[];
-  partialMatches: RequirementMatch[];
-  unmetRequirements: RequirementMatch[];
-  transferableSkills: {
-    skill: string;
-    relevance: string;
-  }[];
-  skillGaps: {
-    skill: string;
-    importance: 'Critical' | 'Preferred' | 'Nice-to-have';
-    learningRecommendation: string;
-  }[];
-  summaryAnalysis: string;
-  dataSource: 'AI HR Toolkit MCP' | 'Fallback Analyzer';
-}
-
-export interface TailoredResumeRecommendation {
-  roleAlignmentSummary: string;
-  targetedKeywords: string[];
-  bulletPointOptimizations: {
-    originalBullet: string;
-    improvedBullet: string;
-    rationale: string;
-  }[];
-}
-
-export interface GeneratedCoverLetter {
-  recipient: string;
-  jobTitle: string;
-  company: string;
-  salutation: string;
-  openingParagraph: string;
-  bodyParagraphs: string[];
-  closingParagraph: string;
-  signoff: string;
-  fullLetter: string;
-  factualVerificationNote: string;
-  dataSource: 'StoryLenses MCP' | 'Fallback Generator';
-}
-
-export interface InterviewQuestion {
+export interface SavedJobItem {
   id: string;
-  category: 'Technical & Architecture' | 'Behavioral & Culture (STAR)' | 'Addressing Experience Gaps' | 'Role & Motivation';
-  question: string;
-  contextWhyAsked: string;
-  suggestedAnswerStrategy: string;
-  pointsToHighlightFromResume: string[];
-  potentialPitfallsToAvoid: string[];
-}
-
-export interface InterviewPrepResult {
-  disclaimer: string;
-  jobTitle: string;
-  company: string;
-  questions: InterviewQuestion[];
-  overallPreparationTips: string[];
-}
-
-export type ApplicationStatus = 'Saved' | 'Applied' | 'Interview' | 'Offer' | 'Rejected';
-
-export interface ApplicationTrackerItem {
-  id: string;
-  jobId: string;
-  jobTitle: string;
-  company: string;
-  location: string;
-  salaryText?: string;
-  status: ApplicationStatus;
-  dateAdded: string;
-  lastUpdated: string;
-  notes: string;
-  interviewDate?: string;
-  customCoverLetter?: string;
-  matchScore?: number;
+  job: JobListing;
+  savedAt: string;
+  notes?: string;
 }
