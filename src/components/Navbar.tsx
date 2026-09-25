@@ -1,6 +1,6 @@
 import React from 'react';
 import { useCareer } from '../context/CareerContext.tsx';
-import { Briefcase, Bookmark, Server, Activity } from 'lucide-react';
+import { Briefcase, Bookmark, Server, Activity, Sun, Moon } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
   const {
@@ -10,13 +10,15 @@ export const Navbar: React.FC = () => {
     mcpHealth,
     isHealthChecking,
     setIsMcpModalOpen,
+    theme,
+    toggleTheme,
   } = useCareer();
 
   const isConnected = mcpHealth?.server.status === 'connected';
   const isSimulated = mcpHealth?.server.status === 'simulated';
 
   return (
-    <header className="sticky top-0 z-40 bg-slate-900 border-b border-slate-800 text-slate-100 shadow-sm">
+    <header className="sticky top-0 z-40 bg-slate-900 dark:bg-slate-900 border-b border-slate-800 dark:border-slate-800 text-slate-100 shadow-sm transition-colors duration-200">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo & Brand */}
@@ -63,19 +65,34 @@ export const Navbar: React.FC = () => {
               <Bookmark className="w-4 h-4" />
               <span>Saved</span>
               {savedJobs.length > 0 && (
-                <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
+                <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
                   {savedJobs.length}
                 </span>
               )}
             </button>
           </nav>
 
-          {/* Status Indicator */}
-          <div className="flex items-center space-x-2">
+          {/* Controls: Theme Toggle & MCP Status */}
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            {/* Dark / Light Mode Toggle */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-lg border border-slate-700/80 bg-slate-800/80 text-slate-300 hover:text-cyan-400 hover:border-slate-600 transition-colors"
+              title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+              aria-label="Toggle theme"
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Moon className="w-4 h-4 text-cyan-300" />
+              )}
+            </button>
+
+            {/* MCP Health Check Button */}
             <button
               onClick={() => setIsMcpModalOpen(true)}
               className="flex items-center space-x-2 px-3 py-1.5 rounded-lg border text-xs font-mono transition-all bg-slate-950/80 border-slate-800 hover:border-slate-700 text-slate-300"
-              title="Click to inspect Google Jobs SerpApi connection"
+              title="Click to inspect JobDataLake MCP connection"
             >
               <Server className="w-3.5 h-3.5 text-slate-400" />
               <div className="flex items-center space-x-1.5">
@@ -93,13 +110,13 @@ export const Navbar: React.FC = () => {
                 </span>
                 <span className="hidden sm:inline">
                   {isConnected
-                    ? 'Google Jobs: Live'
+                    ? 'JobDataLake: Live'
                     : isSimulated
-                    ? 'Google Jobs: Fallback'
-                    : 'Google Jobs: Offline'}
+                    ? 'JobDataLake: Fallback'
+                    : 'JobDataLake: Offline'}
                 </span>
               </div>
-              <Activity className={`w-3 h-3 text-slate-500 ${isHealthChecking ? 'animate-spin' : ''}`} />
+              <Activity className={`w-3 h-3 text-slate-500 ${isHealthChecking ? 'animate-spin text-cyan-400' : ''}`} />
             </button>
           </div>
         </div>

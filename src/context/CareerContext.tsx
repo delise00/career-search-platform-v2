@@ -1,5 +1,5 @@
 /**
- * Job Search & Saved Jobs State Context
+ * Job Search & Saved Jobs State Context with Dark/Light Mode Theme Support
  */
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
@@ -7,6 +7,7 @@ import { JobListing, McpOverallHealth } from '../types.ts';
 import { api } from '../services/api.ts';
 
 export type AppTab = 'search' | 'saved';
+export type ThemeMode = 'dark' | 'light';
 
 interface CareerContextType {
   activeTab: AppTab;
@@ -21,11 +22,14 @@ interface CareerContextType {
   refreshMcpHealth: () => Promise<void>;
   isMcpModalOpen: boolean;
   setIsMcpModalOpen: (open: boolean) => void;
+  theme: ThemeMode;
+  toggleTheme: () => void;
 }
 
 const CareerContext = createContext<CareerContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_SAVED_JOBS = 'indeed_mcp_saved_jobs_v1';
+const LOCAL_STORAGE_SAVED_JOBS = 'jobdatalake_mcp_saved_jobs_v1';
+const LOCAL_STORAGE_THEME = 'jobdatalake_theme_mode';
 
 export const CareerProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<AppTab>('search');
@@ -34,6 +38,7 @@ export const CareerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [mcpHealth, setMcpHealth] = useState<McpOverallHealth | null>(null);
   const [isHealthChecking, setIsHealthChecking] = useState(false);
   const [isMcpModalOpen, setIsMcpModalOpen] = useState(false);
+  const [theme, setTheme] = useState<ThemeMode>('dark');
 
   // Initialize from LocalStorage
   useEffect(() => {
@@ -42,6 +47,10 @@ export const CareerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       if (stored) {
         setSavedJobs(JSON.parse(stored));
       }
+      const savedTheme = localStorage.getItem(LOCAL_STORAGE_THEME) as ThemeMode | null;
+      if (savedTheme === 'light' || savedTheme === 'dark') {
+        setTheme(savedTheme);
+      }
     } catch (e) {
       console.warn('LocalStorage error:', e);
     }
@@ -49,13 +58,23 @@ export const CareerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     refreshMcpHealth();
   }, []);
 
+  const toggleTheme = () => {
+    setTheme((prev) => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      try {
+        localStorage.setItem(LOCAL_STORAGE_THEME, next);
+      } catch {}
+      return next;
+    });
+  };
+
   const refreshMcpHealth = async () => {
     setIsHealthChecking(true);
     try {
       const health = await api.getMcpHealth();
       setMcpHealth(health);
     } catch (err) {
-      console.warn('Could not fetch Indeed MCP health:', err);
+      console.warn('Could not fetch JobDataLake MCP health:', err);
     } finally {
       setIsHealthChecking(false);
     }
@@ -94,6 +113,8 @@ export const CareerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         refreshMcpHealth,
         isMcpModalOpen,
         setIsMcpModalOpen,
+        theme,
+        toggleTheme,
       }}
     >
       {children}
@@ -103,6 +124,8 @@ export const CareerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
 export const useCareer = () => {
   const context = useContext(CareerContext);
-  if (!context) throw new Error('useCareer must be used within a CareerProvider');
+  if (!context) {
+    throw new Error('useCareer must be used within a CareerProvider');
+  }
   return context;
 };

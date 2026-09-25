@@ -1,5 +1,5 @@
 /**
- * Client API Service communicating with the server-side Google Jobs SerpApi endpoints
+ * Client API Service communicating with the server-side JobDataLake MCP endpoints
  */
 
 import { JobListing, McpOverallHealth } from '../types.ts';
@@ -19,11 +19,11 @@ async function safeJsonFetch(url: string, options?: RequestInit): Promise<any> {
 
 export const api = {
   /**
-   * Fetch Google Jobs health status
+   * Fetch JobDataLake MCP health status
    */
   async getMcpHealth(): Promise<McpOverallHealth> {
-    const { ok, json } = await safeJsonFetch('/api/mcp/health');
-    if (!ok || !json.success) throw new Error(json?.error || 'Failed to fetch Google Jobs health');
+    const { ok, json } = await safeJsonFetch('/api/mcp');
+    if (!ok || !json.success) throw new Error(json?.error || 'Failed to fetch JobDataLake MCP health');
     return json.data;
   },
 
@@ -41,7 +41,7 @@ export const api = {
   },
 
   /**
-   * Search jobs via Google Jobs
+   * Search jobs via JobDataLake MCP
    */
   async searchJobs(params: {
     keywords?: string;
@@ -58,16 +58,16 @@ export const api = {
     if (!ok || !json.success) throw new Error(json?.error || 'Failed to search jobs');
     return {
       jobs: json.data || [],
-      source: json.source || 'Google Jobs',
+      source: json.source || 'JobDataLake MCP',
       warning: json.warning,
     };
   },
 
   /**
-   * Get job details
+   * Fetch full job details
    */
-  async getJobDetails(jobId: string): Promise<JobListing> {
-    const { ok, json } = await safeJsonFetch(`/api/jobs/${encodeURIComponent(jobId)}`);
+  async getJobDetails(id: string): Promise<JobListing> {
+    const { ok, json } = await safeJsonFetch(`/api/jobs/${encodeURIComponent(id)}`);
     if (!ok || !json.success) throw new Error(json?.error || 'Failed to fetch job details');
     return json.data;
   },

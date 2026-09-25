@@ -1,5 +1,5 @@
 /**
- * Frontend Types for Google Jobs Search Platform
+ * Frontend Types for JobDataLake MCP Search Platform
  */
 
 export interface JobListing {
