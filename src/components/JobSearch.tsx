@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useCareer } from '../context/CareerContext.tsx';
 import { api } from '../services/api.ts';
-import { JobListing } from '../types.ts';
+import { JobListing, JobFilterParams } from '../types.ts';
 import {
   Search,
   MapPin,
@@ -14,6 +14,9 @@ import {
   X,
   ArrowRight,
   ExternalLink,
+  ChevronDown,
+  ChevronUp,
+  Target,
 } from 'lucide-react';
 
 export const JobSearch: React.FC = () => {
@@ -23,15 +26,29 @@ export const JobSearch: React.FC = () => {
     savedJobs,
     toggleSaveJob,
     isJobSaved,
+    setSelectedJobForScoring,
     theme,
   } = useCareer();
 
   const [jobs, setJobs] = useState<JobListing[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [locationFilter, setLocationFilter] = useState('All');
-  const [experienceFilter, setExperienceFilter] = useState('All');
-  const [industryFilter, setIndustryFilter] = useState('All');
+
+  // Full Filters as supported by JobDataLake
+  const [query, setQuery] = useState('');
+  const [remoteType, setRemoteType] = useState<'all' | 'fully_remote' | 'hybrid' | 'on_site'>('all');
+  const [seniority, setSeniority] = useState('all');
+  const [jobFunction, setJobFunction] = useState('all');
+  const [employmentType, setEmploymentType] = useState<'all' | 'full_time' | 'part_time' | 'contract' | 'internship'>('all');
+  const [salaryMin, setSalaryMin] = useState<string>('');
+  const [salaryMax, setSalaryMax] = useState<string>('');
+  const [skills, setSkills] = useState('');
+  const [location, setLocation] = useState('all');
+  const [countries, setCountries] = useState('all');
+  const [postedWithin, setPostedWithin] = useState<'all' | '24h' | '7d' | '30d'>('all');
+  const [sortBy, setSortBy] = useState<'posted_at:desc' | 'salary_max_usd:desc' | 'salary_min_usd:asc'>('posted_at:desc');
+  const [company, setCompany] = useState('');
+
+  const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
   const [searchWarning, setSearchWarning] = useState<string | null>(null);
   const [searchSource, setSearchSource] = useState<string>('JobDataLake MCP');
   const [activeJobModal, setActiveJobModal] = useState<JobListing | null>(null);
@@ -40,20 +57,30 @@ export const JobSearch: React.FC = () => {
     setIsLoading(true);
     setSearchWarning(null);
     try {
-      const response = await api.searchJobs({
-        keywords: searchQuery,
-        location: locationFilter === 'All' ? undefined : locationFilter,
-        experienceLevel: experienceFilter === 'All' ? undefined : experienceFilter,
-        industry: industryFilter === 'All' ? undefined : industryFilter,
-      });
+      const filterParams: JobFilterParams = {
+        query: query.trim() || undefined,
+        remote_type: remoteType !== 'all' ? remoteType : undefined,
+        seniority: seniority !== 'all' ? seniority : undefined,
+        job_function: jobFunction !== 'all' ? jobFunction : undefined,
+        employment_type: employmentType !== 'all' ? employmentType : undefined,
+        salary_min: salaryMin ? parseInt(salaryMin, 10) : undefined,
+        salary_max: salaryMax ? parseInt(salaryMax, 10) : undefined,
+        skills: skills.trim() || undefined,
+        location: location !== 'all' ? location : undefined,
+        countries: countries !== 'all' ? countries : undefined,
+        posted_within: postedWithin !== 'all' ? postedWithin : undefined,
+        sort_by: sortBy,
+        company: company.trim() || undefined,
+      };
 
+      const response = await api.searchJobs(filterParams);
       setJobs(response.jobs);
       setSearchSource(response.source);
       if (response.warning) {
         setSearchWarning(response.warning);
       }
     } catch (err: any) {
-      setSearchWarning(err.message || 'JobDataLake MCP search is temporarily unavailable.');
+      setSearchWarning(err.message || 'JobDataLake search is temporarily unavailable.');
       setJobs([]);
     } finally {
       setIsLoading(false);
@@ -62,17 +89,22 @@ export const JobSearch: React.FC = () => {
 
   useEffect(() => {
     fetchJobs();
-  }, [locationFilter, experienceFilter, industryFilter]);
+  }, [remoteType, seniority, jobFunction, employmentType, postedWithin, sortBy]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     fetchJobs();
   };
 
+  const handleScoreJob = (job: JobListing) => {
+    setSelectedJobForScoring(job);
+    setActiveTab('cv-scorer');
+  };
+
   const displayedJobs = activeTab === 'saved' ? savedJobs : jobs;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -82,7 +114,7 @@ export const JobSearch: React.FC = () => {
           <p className="text-sm mt-1 opacity-75">
             {activeTab === 'saved'
               ? `You have bookmarked ${savedJobs.length} position${savedJobs.length === 1 ? '' : 's'}.`
-              : 'Search and filter 1M+ active positions powered by JobDataLake MCP.'}
+              : 'Search and filter 1M+ active positions across 20,000+ companies powered by JobDataLake MCP.'}
           </p>
         </div>
 
@@ -97,7 +129,7 @@ export const JobSearch: React.FC = () => {
         )}
       </div>
 
-      {/* Warning banner if fallback active */}
+      {/* Warning banner */}
       {searchWarning && activeTab === 'search' && (
         <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-800/60 text-amber-200 text-xs flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -110,21 +142,22 @@ export const JobSearch: React.FC = () => {
         </div>
       )}
 
-      {/* Search Bar & Filter Controls (only in search view) */}
+      {/* Search Bar & Comprehensive JobDataLake Filter Controls */}
       {activeTab === 'search' && (
-        <div className={`border rounded-2xl p-4 shadow-sm space-y-4 transition-colors ${
+        <div className={`border rounded-2xl p-4 sm:p-5 shadow-sm space-y-4 transition-colors ${
           theme === 'dark'
             ? 'bg-slate-900/90 border-slate-800'
             : 'bg-white border-slate-200 shadow-slate-200/50'
         }`}>
+          {/* Main Search Row */}
           <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
               <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
               <input
                 type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search JobDataLake by role, company, or skills (e.g. React, Full Stack, Python, AWS)..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Keywords (title, company, skills, e.g. React, Full Stack, Python, AWS)..."
                 className={`w-full border rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500 transition-colors ${
                   theme === 'dark'
                     ? 'bg-slate-950 border-slate-800 text-slate-100 placeholder-slate-500'
@@ -132,6 +165,7 @@ export const JobSearch: React.FC = () => {
                 }`}
               />
             </div>
+
             <button
               type="submit"
               disabled={isLoading}
@@ -142,76 +176,280 @@ export const JobSearch: React.FC = () => {
             </button>
           </form>
 
-          {/* Filters */}
-          <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-800/40 text-xs">
-            <div className="flex items-center space-x-1.5 opacity-70">
-              <Filter className="w-3.5 h-3.5" />
-              <span className="font-semibold">Filters:</span>
-            </div>
-
-            {/* Location */}
-            <div className="flex items-center space-x-1">
-              <span className="opacity-60">Location:</span>
+          {/* Primary Quick Filters */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5 pt-2 border-t border-slate-800/40 text-xs">
+            {/* Remote Type */}
+            <div>
+              <label className="block text-[11px] opacity-60 mb-1">Remote Policy</label>
               <select
-                value={locationFilter}
-                onChange={(e) => setLocationFilter(e.target.value)}
-                className={`border rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:border-cyan-500 ${
-                  theme === 'dark'
-                    ? 'bg-slate-950 border-slate-800 text-slate-200'
-                    : 'bg-slate-100 border-slate-300 text-slate-800'
+                value={remoteType}
+                onChange={(e: any) => setRemoteType(e.target.value)}
+                className={`w-full border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-cyan-500 ${
+                  theme === 'dark' ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-slate-100 border-slate-300 text-slate-800'
                 }`}
               >
-                <option value="All">All Locations</option>
-                <option value="United States">United States</option>
-                <option value="Singapore">Singapore</option>
-                <option value="Remote">Remote</option>
-                <option value="Hybrid">Hybrid</option>
+                <option value="all">All Remote Types</option>
+                <option value="fully_remote">Fully Remote</option>
+                <option value="hybrid">Hybrid</option>
+                <option value="on_site">On-site</option>
               </select>
             </div>
 
-            {/* Experience */}
-            <div className="flex items-center space-x-1">
-              <span className="opacity-60">Experience:</span>
+            {/* Seniority */}
+            <div>
+              <label className="block text-[11px] opacity-60 mb-1">Seniority</label>
               <select
-                value={experienceFilter}
-                onChange={(e) => setExperienceFilter(e.target.value)}
-                className={`border rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:border-cyan-500 ${
-                  theme === 'dark'
-                    ? 'bg-slate-950 border-slate-800 text-slate-200'
-                    : 'bg-slate-100 border-slate-300 text-slate-800'
+                value={seniority}
+                onChange={(e) => setSeniority(e.target.value)}
+                className={`w-full border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-cyan-500 ${
+                  theme === 'dark' ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-slate-100 border-slate-300 text-slate-800'
                 }`}
               >
-                <option value="All">All Levels</option>
-                <option value="Entry / Junior">Entry / Junior</option>
-                <option value="Mid-Level">Mid-Level</option>
+                <option value="all">All Seniority</option>
+                <option value="Entry">Entry Level</option>
+                <option value="Mid Level">Mid Level</option>
                 <option value="Senior">Senior</option>
+                <option value="Staff">Staff</option>
+                <option value="Principal">Principal</option>
+                <option value="Manager">Manager</option>
+                <option value="Director">Director</option>
+                <option value="C Level">C Level</option>
               </select>
             </div>
 
-            {/* Industry */}
-            <div className="flex items-center space-x-1">
-              <span className="opacity-60">Industry:</span>
+            {/* Job Function */}
+            <div>
+              <label className="block text-[11px] opacity-60 mb-1">Function</label>
               <select
-                value={industryFilter}
-                onChange={(e) => setIndustryFilter(e.target.value)}
-                className={`border rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:border-cyan-500 ${
-                  theme === 'dark'
-                    ? 'bg-slate-950 border-slate-800 text-slate-200'
-                    : 'bg-slate-100 border-slate-300 text-slate-800'
+                value={jobFunction}
+                onChange={(e) => setJobFunction(e.target.value)}
+                className={`w-full border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-cyan-500 ${
+                  theme === 'dark' ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-slate-100 border-slate-300 text-slate-800'
                 }`}
               >
-                <option value="All">All Industries</option>
-                <option value="Technology">Technology / Software</option>
-                <option value="Banking">Banking / Fintech</option>
-                <option value="GovTech">Public Sector / GovTech</option>
-                <option value="Cyber">Cyber Security</option>
+                <option value="all">All Functions</option>
+                <option value="eng">Engineering</option>
+                <option value="data">Data / AI</option>
+                <option value="design">Design</option>
+                <option value="product">Product</option>
+                <option value="security">Security</option>
+                <option value="ops">Operations</option>
+                <option value="sales">Sales</option>
+                <option value="marketing">Marketing</option>
+                <option value="finance">Finance</option>
+                <option value="hr">HR</option>
+                <option value="legal">Legal</option>
               </select>
             </div>
 
-            <div className="ml-auto font-mono text-[11px] opacity-70">
+            {/* Employment Type */}
+            <div>
+              <label className="block text-[11px] opacity-60 mb-1">Contract Type</label>
+              <select
+                value={employmentType}
+                onChange={(e: any) => setEmploymentType(e.target.value)}
+                className={`w-full border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-cyan-500 ${
+                  theme === 'dark' ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-slate-100 border-slate-300 text-slate-800'
+                }`}
+              >
+                <option value="all">All Types</option>
+                <option value="full_time">Full-time</option>
+                <option value="part_time">Part-time</option>
+                <option value="contract">Contract</option>
+                <option value="internship">Internship</option>
+              </select>
+            </div>
+
+            {/* Posted Within */}
+            <div>
+              <label className="block text-[11px] opacity-60 mb-1">Posted Within</label>
+              <select
+                value={postedWithin}
+                onChange={(e: any) => setPostedWithin(e.target.value)}
+                className={`w-full border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-cyan-500 ${
+                  theme === 'dark' ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-slate-100 border-slate-300 text-slate-800'
+                }`}
+              >
+                <option value="all">Anytime</option>
+                <option value="24h">Past 24 Hours</option>
+                <option value="7d">Past 7 Days</option>
+                <option value="30d">Past 30 Days</option>
+              </select>
+            </div>
+
+            {/* Sort By */}
+            <div>
+              <label className="block text-[11px] opacity-60 mb-1">Sort Order</label>
+              <select
+                value={sortBy}
+                onChange={(e: any) => setSortBy(e.target.value)}
+                className={`w-full border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-cyan-500 ${
+                  theme === 'dark' ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-slate-100 border-slate-300 text-slate-800'
+                }`}
+              >
+                <option value="posted_at:desc">Newest First</option>
+                <option value="salary_max_usd:desc">Highest Salary</option>
+                <option value="salary_min_usd:asc">Lowest Salary</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Toggle for Advanced Filters */}
+          <div className="flex items-center justify-between pt-1">
+            <button
+              type="button"
+              onClick={() => setIsAdvancedFiltersOpen(!isAdvancedFiltersOpen)}
+              className="flex items-center space-x-1.5 text-xs font-semibold text-cyan-500 hover:text-cyan-400 transition-colors"
+            >
+              <Filter className="w-3.5 h-3.5" />
+              <span>
+                {isAdvancedFiltersOpen ? 'Hide Advanced JobDataLake Filters' : 'Show Advanced Filters (Skills AND, Salary, Countries, Company)'}
+              </span>
+              {isAdvancedFiltersOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+
+            <div className="font-mono text-[11px] opacity-70">
               Source: <span className="text-cyan-500 font-semibold">{searchSource}</span>
             </div>
           </div>
+
+          {/* Advanced Filters Expandable Drawer */}
+          {isAdvancedFiltersOpen && (
+            <div className={`p-4 rounded-xl border grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs ${
+              theme === 'dark' ? 'bg-slate-950/70 border-slate-800' : 'bg-slate-50 border-slate-200'
+            }`}>
+              {/* Skills AND Mode */}
+              <div>
+                <label className="block text-[11px] opacity-75 mb-1 font-semibold">
+                  Skills (AND mode)
+                </label>
+                <input
+                  type="text"
+                  value={skills}
+                  onChange={(e) => setSkills(e.target.value)}
+                  placeholder="e.g. Python,AWS,Kubernetes"
+                  className={`w-full border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-cyan-500 ${
+                    theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-300 text-slate-900'
+                  }`}
+                />
+              </div>
+
+              {/* Location or Continent */}
+              <div>
+                <label className="block text-[11px] opacity-75 mb-1 font-semibold">
+                  Location / Continent
+                </label>
+                <input
+                  type="text"
+                  value={location === 'all' ? '' : location}
+                  onChange={(e) => setLocation(e.target.value || 'all')}
+                  placeholder="e.g. Singapore, Europe, Asia"
+                  className={`w-full border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-cyan-500 ${
+                    theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-300 text-slate-900'
+                  }`}
+                />
+              </div>
+
+              {/* Country ISO Codes */}
+              <div>
+                <label className="block text-[11px] opacity-75 mb-1 font-semibold">
+                  Countries (ISO Codes)
+                </label>
+                <input
+                  type="text"
+                  value={countries === 'all' ? '' : countries}
+                  onChange={(e) => setCountries(e.target.value || 'all')}
+                  placeholder="e.g. US, GB, DE, SG, JP"
+                  className={`w-full border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-cyan-500 ${
+                    theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-300 text-slate-900'
+                  }`}
+                />
+              </div>
+
+              {/* Company Domain */}
+              <div>
+                <label className="block text-[11px] opacity-75 mb-1 font-semibold">
+                  Company Domain
+                </label>
+                <input
+                  type="text"
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                  placeholder="e.g. stripe.com, google.com"
+                  className={`w-full border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-cyan-500 ${
+                    theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-300 text-slate-900'
+                  }`}
+                />
+              </div>
+
+              {/* Min Salary (USD) */}
+              <div>
+                <label className="block text-[11px] opacity-75 mb-1 font-semibold">
+                  Min Annual Salary (USD)
+                </label>
+                <input
+                  type="number"
+                  value={salaryMin}
+                  onChange={(e) => setSalaryMin(e.target.value)}
+                  placeholder="e.g. 120000 for $120k"
+                  className={`w-full border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-cyan-500 ${
+                    theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-300 text-slate-900'
+                  }`}
+                />
+              </div>
+
+              {/* Max Salary (USD) */}
+              <div>
+                <label className="block text-[11px] opacity-75 mb-1 font-semibold">
+                  Max Annual Salary (USD)
+                </label>
+                <input
+                  type="number"
+                  value={salaryMax}
+                  onChange={(e) => setSalaryMax(e.target.value)}
+                  placeholder="e.g. 200000 for $200k"
+                  className={`w-full border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-cyan-500 ${
+                    theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-300 text-slate-900'
+                  }`}
+                />
+              </div>
+
+              <div className="sm:col-span-2 flex items-end justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuery('');
+                    setRemoteType('all');
+                    setSeniority('all');
+                    setJobFunction('all');
+                    setEmploymentType('all');
+                    setSalaryMin('');
+                    setSalaryMax('');
+                    setSkills('');
+                    setLocation('all');
+                    setCountries('all');
+                    setPostedWithin('all');
+                    setCompany('');
+                    fetchJobs();
+                  }}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                    theme === 'dark'
+                      ? 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700'
+                      : 'border-slate-300 bg-slate-200 text-slate-700 hover:bg-slate-300'
+                  }`}
+                >
+                  Reset All Filters
+                </button>
+                <button
+                  type="button"
+                  onClick={fetchJobs}
+                  className="px-4 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold"
+                >
+                  Apply Filters
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -246,10 +484,11 @@ export const JobSearch: React.FC = () => {
           ) : (
             <button
               onClick={() => {
-                setSearchQuery('');
-                setLocationFilter('All');
-                setExperienceFilter('All');
-                setIndustryFilter('All');
+                setQuery('');
+                setRemoteType('all');
+                setSeniority('all');
+                setJobFunction('all');
+                fetchJobs();
               }}
               className={`px-4 py-2 rounded-xl text-xs font-medium transition-colors ${
                 theme === 'dark'
@@ -301,8 +540,10 @@ export const JobSearch: React.FC = () => {
 
                   {/* Title & Company */}
                   <div>
-                    <h3 className="font-bold text-base line-clamp-1 hover:text-cyan-500 cursor-pointer"
-                        onClick={() => setActiveJobModal(job)}>
+                    <h3
+                      className="font-bold text-base line-clamp-1 hover:text-cyan-500 cursor-pointer"
+                      onClick={() => setActiveJobModal(job)}
+                    >
                       {job.title}
                     </h3>
                     <div className="flex items-center space-x-1.5 text-xs opacity-75 mt-1">
@@ -352,14 +593,22 @@ export const JobSearch: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Card Action footer */}
+                {/* Card Action footer: Details + Score with Calibrd */}
                 <div className={`pt-3 border-t flex items-center justify-between text-xs ${
                   theme === 'dark' ? 'border-slate-800/80' : 'border-slate-100'
                 }`}>
-                  <span className="text-[11px] opacity-60">{job.postedDate}</span>
+                  <button
+                    onClick={() => handleScoreJob(job)}
+                    className="flex items-center space-x-1 text-cyan-500 hover:text-cyan-400 font-medium text-xs"
+                    title="Score your CV against this posting via Calibrd MCP"
+                  >
+                    <Target className="w-3.5 h-3.5" />
+                    <span>Score CV</span>
+                  </button>
+
                   <button
                     onClick={() => setActiveJobModal(job)}
-                    className="flex items-center space-x-1 text-cyan-500 hover:text-cyan-400 font-medium text-xs group"
+                    className="flex items-center space-x-1 text-slate-400 hover:text-slate-200 font-medium text-xs group"
                   >
                     <span>Details</span>
                     <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
@@ -452,9 +701,17 @@ export const JobSearch: React.FC = () => {
             <div className={`px-6 py-4 border-t flex items-center justify-between ${
               theme === 'dark' ? 'border-slate-800 bg-slate-950/80' : 'border-slate-200 bg-slate-50'
             }`}>
-              <span className="text-xs font-mono opacity-60">
-                Source: {activeJobModal.source}
-              </span>
+              <button
+                onClick={() => {
+                  const job = activeJobModal;
+                  setActiveJobModal(null);
+                  handleScoreJob(job);
+                }}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-cyan-600/20 text-cyan-300 border border-cyan-800 hover:bg-cyan-600/30 transition-colors"
+              >
+                <Target className="w-3.5 h-3.5" />
+                <span>Score My CV for this Role</span>
+              </button>
 
               <div className="flex items-center space-x-3">
                 {activeJobModal.applyLink && (
@@ -464,7 +721,7 @@ export const JobSearch: React.FC = () => {
                     rel="noopener noreferrer"
                     className="flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-medium bg-cyan-600 hover:bg-cyan-500 text-white transition-colors shadow-sm"
                   >
-                    <span>Apply on Job Board</span>
+                    <span>Apply via ATS</span>
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                 )}

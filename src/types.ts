@@ -1,6 +1,56 @@
 /**
- * Frontend Types for JobDataLake MCP Search Platform
+ * Frontend Types for JobDataLake, CVpop, and Calibrd MCP Platform
  */
+
+export interface McpToolSchema {
+  name: string;
+  description: string;
+  gate?: string;
+  inputSchema?: {
+    type: string;
+    properties?: Record<string, any>;
+    required?: string[];
+  };
+}
+
+export interface McpServerHealth {
+  id: string;
+  name: string;
+  category: 'jobs' | 'cv' | 'scoring';
+  endpoint: string;
+  reachable: boolean;
+  status: 'connected' | 'simulated' | 'error' | 'disconnected';
+  latencyMs: number;
+  lastPing: string;
+  discoveredTools: McpToolSchema[];
+  errorMessage?: string;
+  protocolVersion?: string;
+}
+
+export interface MultiMcpHealthResponse {
+  jobdatalake: McpServerHealth;
+  cvpop: McpServerHealth;
+  calibrd: McpServerHealth;
+  timestamp: string;
+}
+
+export interface JobFilterParams {
+  query?: string;
+  remote_type?: 'fully_remote' | 'hybrid' | 'on_site' | 'all';
+  seniority?: string;
+  job_function?: string;
+  employment_type?: 'full_time' | 'part_time' | 'contract' | 'internship' | 'all';
+  salary_min?: number;
+  salary_max?: number;
+  skills?: string;
+  location?: string;
+  countries?: string;
+  posted_within?: '24h' | '7d' | '30d' | 'all';
+  sort_by?: 'posted_at:desc' | 'salary_max_usd:desc' | 'salary_min_usd:asc';
+  company?: string;
+  page?: number;
+  per_page?: number;
+}
 
 export interface JobListing {
   id: string;
@@ -24,33 +74,50 @@ export interface JobListing {
   applyLink?: string;
 }
 
-export interface McpToolSchema {
-  name: string;
-  description: string;
-  inputSchema?: {
-    type: string;
-    properties?: Record<string, any>;
-    required?: string[];
+export interface CvDraftPayload {
+  personalInfo: {
+    firstName: string;
+    lastName: string;
+    summary?: string;
+  };
+  contactInfo?: {
+    email?: string;
+    phone?: string;
+    location?: string;
+    website?: string;
+    linkedin?: string;
+  };
+  works?: Array<{
+    company: string;
+    position: string;
+    responsibility: string;
+    period?: {
+      from?: { year: number; month?: number };
+      to?: { year: number; month?: number };
+      current?: boolean;
+    };
+  }>;
+  educations?: Array<{
+    organisation: string;
+    qualification: string;
+    description: string;
+  }>;
+  skills?: string[];
+  style?: {
+    modelType?: 'london' | 'rio' | 'newyork' | 'tokyo' | 'helsinki' | 'paris' | 'amsterdam';
+    modelBaseColor?: string;
+    modelBaseFont?: string;
   };
 }
 
-export interface McpServerHealth {
-  id: string;
-  name: string;
-  category: 'jobs';
-  endpoint: string;
-  reachable: boolean;
-  status: 'connected' | 'simulated' | 'error' | 'disconnected';
-  latencyMs: number;
-  lastPing: string;
-  discoveredTools: McpToolSchema[];
-  errorMessage?: string;
-  protocolVersion?: string;
-}
-
-export interface McpOverallHealth {
-  server: McpServerHealth;
-  isReachable: boolean;
-  localFallbackActive: boolean;
-  timestamp: string;
+export interface CalibrdScoreResult {
+  score: number;
+  level: string;
+  summary: string;
+  matches: string[];
+  gaps: string[];
+  recommendations: string[];
+  recruiterScore?: number;
+  atsScore?: number;
+  atsIssues?: string[];
 }

@@ -1,13 +1,20 @@
 /**
  * Central MCP Registry & Service Layer
- * Native MCP connection to JobDataLake (https://mcp.jobdatalake.com)
- * with robust local fallback engine when offline.
+ * Coordinates JobDataLake, CVpop, and Calibrd MCP integrations
  */
 
 import fs from 'fs';
 import { JobDataLakeMcpClient } from './client.ts';
-import { McpServerHealth, JobListing } from './types.ts';
-import { LocalMcpFallbackEngine, JOBDATALAKE_FALLBACK_TOOLS } from './local-provider.ts';
+import { cvpopClient } from './cvpop-client.ts';
+import { calibrdClient } from './calibrd-client.ts';
+import {
+  McpServerHealth,
+  JobListing,
+  JobFilterParams,
+  CvDraftPayload,
+  MultiMcpHealthResponse,
+} from './types.ts';
+import { LocalMcpFallbackEngine } from './local-provider.ts';
 
 const DEFAULT_JOBDATALAKE_URL = 'https://mcp.jobdatalake.com';
 
@@ -42,9 +49,7 @@ export class McpRegistry {
           }
         }
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
 
     const rawUrl = process.env.JOBDATALAKE_MCP_URL || DEFAULT_JOBDATALAKE_URL;
     const apiKey =
@@ -66,7 +71,27 @@ export class McpRegistry {
   }
 
   /**
-   * Health status check for JobDataLake MCP server
+   * Health status check for all 3 MCP servers: JobDataLake, CVpop, Calibrd
+   */
+  public async getAllHealthStatus(): Promise<MultiMcpHealthResponse> {
+    this.syncEnvironment();
+
+    const [jdlHealth, cvpopHealth, calibrdHealth] = await Promise.all([
+      this.jobsClient.checkHealth(),
+      cvpopClient.checkHealth(),
+      calibrdClient.checkHealth(),
+    ]);
+
+    return {
+      jobdatalake: jdlHealth,
+      cvpop: cvpopHealth,
+      calibrd: calibrdHealth,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Legacy single-server health check for backward compatibility
    */
   public async getHealthStatus(): Promise<{
     server: McpServerHealth;
@@ -75,25 +100,7 @@ export class McpRegistry {
     timestamp: string;
   }> {
     this.syncEnvironment();
-    const rawHealth = await this.jobsClient.checkHealth();
-
-    let serverHealth: McpServerHealth;
-
-    if (rawHealth.reachable && rawHealth.status === 'connected') {
-      serverHealth = rawHealth;
-    } else if (this.allowLocalFallback) {
-      serverHealth = {
-        ...rawHealth,
-        status: 'simulated',
-        reachable: true,
-        discoveredTools: JOBDATALAKE_FALLBACK_TOOLS,
-        errorMessage: rawHealth.errorMessage
-          ? `Operating in benchmark mode: ${rawHealth.errorMessage}`
-          : 'Operating in local benchmark dataset mode.',
-      };
-    } else {
-      serverHealth = rawHealth;
-    }
+    const serverHealth = await this.jobsClient.checkHealth();
 
     return {
       server: serverHealth,
@@ -104,15 +111,9 @@ export class McpRegistry {
   }
 
   /**
-   * Search jobs via JobDataLake MCP
+   * Search jobs via JobDataLake MCP with complete filter support
    */
-  public async searchJobs(params: {
-    keywords?: string;
-    location?: string;
-    experienceLevel?: string;
-    industry?: string;
-    minSalary?: number;
-  }): Promise<{ jobs: JobListing[]; source: string; warning?: string }> {
+  public async searchJobs(params: JobFilterParams): Promise<{ jobs: JobListing[]; source: string; warning?: string }> {
     this.syncEnvironment();
 
     try {
@@ -124,13 +125,11 @@ export class McpRegistry {
         };
       }
     } catch (err: any) {
-      console.warn('[JobDataLake MCP] Remote query failed, falling back:', err.message);
+      console.warn('[JobDataLake MCP] Query failed, using verified fallback:', err.message);
     }
 
     if (!this.allowLocalFallback) {
-      throw new Error(
-        'JobDataLake MCP server is currently unavailable and local fallback is disabled.',
-      );
+      throw new Error('JobDataLake MCP server query failed and local fallback is disabled.');
     }
 
     const localJobs = await LocalMcpFallbackEngine.searchJobs(params);
@@ -149,12 +148,31 @@ export class McpRegistry {
     try {
       const remoteJob = await this.jobsClient.getJob(jobId);
       if (remoteJob) return { job: remoteJob, source: 'JobDataLake MCP' };
-    } catch {
-      // fallback
-    }
+    } catch {}
 
     const localJob = await LocalMcpFallbackEngine.getJobDetails(jobId);
     return { job: localJob, source: 'JobDataLake MCP' };
+  }
+
+  /**
+   * CVpop MCP: Create preview
+   */
+  public async createCvPreview(payload: CvDraftPayload) {
+    return cvpopClient.createCvPreview(payload);
+  }
+
+  /**
+   * CVpop MCP: Create claim link
+   */
+  public async createCvClaim(payload: CvDraftPayload) {
+    return cvpopClient.createCvClaim(payload);
+  }
+
+  /**
+   * Calibrd MCP: Score CV against job
+   */
+  public async scoreCvAgainstJob(cvText: string, jobTitle: string, jobDescription: string, level?: string) {
+    return calibrdClient.scoreJob(cvText, jobTitle, jobDescription, level);
   }
 }
 

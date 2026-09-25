@@ -1,23 +1,24 @@
 /**
- * Job Search & Saved Jobs State Context with Dark/Light Mode Theme Support
+ * Global Application Context
+ * Tracks Active Tab, Saved Jobs, Theme, and Multi-MCP Health (JobDataLake, CVpop, Calibrd)
  */
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { JobListing, McpOverallHealth } from '../types.ts';
+import { JobListing, MultiMcpHealthResponse } from '../types.ts';
 import { api } from '../services/api.ts';
 
-export type AppTab = 'search' | 'saved';
+export type AppTab = 'search' | 'saved' | 'cv-builder' | 'cv-scorer';
 export type ThemeMode = 'dark' | 'light';
 
 interface CareerContextType {
   activeTab: AppTab;
   setActiveTab: (tab: AppTab) => void;
-  selectedJob: JobListing | null;
-  setSelectedJob: (job: JobListing | null) => void;
+  selectedJobForScoring: JobListing | null;
+  setSelectedJobForScoring: (job: JobListing | null) => void;
   savedJobs: JobListing[];
   toggleSaveJob: (job: JobListing) => void;
   isJobSaved: (jobId: string) => boolean;
-  mcpHealth: McpOverallHealth | null;
+  multiMcpHealth: MultiMcpHealthResponse | null;
   isHealthChecking: boolean;
   refreshMcpHealth: () => Promise<void>;
   isMcpModalOpen: boolean;
@@ -28,14 +29,14 @@ interface CareerContextType {
 
 const CareerContext = createContext<CareerContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_SAVED_JOBS = 'jobdatalake_mcp_saved_jobs_v1';
+const LOCAL_STORAGE_SAVED_JOBS = 'jobdatalake_mcp_saved_jobs_v2';
 const LOCAL_STORAGE_THEME = 'jobdatalake_theme_mode';
 
 export const CareerProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<AppTab>('search');
-  const [selectedJob, setSelectedJob] = useState<JobListing | null>(null);
+  const [selectedJobForScoring, setSelectedJobForScoring] = useState<JobListing | null>(null);
   const [savedJobs, setSavedJobs] = useState<JobListing[]>([]);
-  const [mcpHealth, setMcpHealth] = useState<McpOverallHealth | null>(null);
+  const [multiMcpHealth, setMultiMcpHealth] = useState<MultiMcpHealthResponse | null>(null);
   const [isHealthChecking, setIsHealthChecking] = useState(false);
   const [isMcpModalOpen, setIsMcpModalOpen] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>('dark');
@@ -71,10 +72,10 @@ export const CareerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const refreshMcpHealth = async () => {
     setIsHealthChecking(true);
     try {
-      const health = await api.getMcpHealth();
-      setMcpHealth(health);
+      const health = await api.getMultiMcpHealth();
+      setMultiMcpHealth(health);
     } catch (err) {
-      console.warn('Could not fetch JobDataLake MCP health:', err);
+      console.warn('Could not fetch MCP health status:', err);
     } finally {
       setIsHealthChecking(false);
     }
@@ -103,12 +104,12 @@ export const CareerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       value={{
         activeTab,
         setActiveTab,
-        selectedJob,
-        setSelectedJob,
+        selectedJobForScoring,
+        setSelectedJobForScoring,
         savedJobs,
         toggleSaveJob,
         isJobSaved,
-        mcpHealth,
+        multiMcpHealth,
         isHealthChecking,
         refreshMcpHealth,
         isMcpModalOpen,

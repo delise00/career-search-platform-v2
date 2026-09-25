@@ -1,25 +1,20 @@
 import React from 'react';
 import { useCareer } from '../context/CareerContext.tsx';
-import { Briefcase, Bookmark, Server, Activity, Sun, Moon } from 'lucide-react';
+import { Briefcase, Bookmark, Server, Sun, Moon, FileText, Target } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
   const {
     activeTab,
     setActiveTab,
     savedJobs,
-    mcpHealth,
-    isHealthChecking,
     setIsMcpModalOpen,
     theme,
     toggleTheme,
   } = useCareer();
 
-  const isConnected = mcpHealth?.server.status === 'connected';
-  const isSimulated = mcpHealth?.server.status === 'simulated';
-
   return (
-    <header className="sticky top-0 z-40 bg-slate-900 dark:bg-slate-900 border-b border-slate-800 dark:border-slate-800 text-slate-100 shadow-sm transition-colors duration-200">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-40 bg-slate-900 border-b border-slate-800 text-slate-100 shadow-sm transition-colors duration-200">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo & Brand */}
           <div
@@ -41,10 +36,10 @@ export const Navbar: React.FC = () => {
           </div>
 
           {/* Navigation Tabs */}
-          <nav className="flex items-center space-x-2">
+          <nav className="flex items-center space-x-1 sm:space-x-2">
             <button
               onClick={() => setActiveTab('search')}
-              className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-all ${
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
                 activeTab === 'search'
                   ? 'bg-slate-800 text-cyan-400 border border-slate-700'
                   : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
@@ -56,7 +51,7 @@ export const Navbar: React.FC = () => {
 
             <button
               onClick={() => setActiveTab('saved')}
-              className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-all ${
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
                 activeTab === 'saved'
                   ? 'bg-slate-800 text-cyan-400 border border-slate-700'
                   : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
@@ -65,14 +60,40 @@ export const Navbar: React.FC = () => {
               <Bookmark className="w-4 h-4" />
               <span>Saved</span>
               {savedJobs.length > 0 && (
-                <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
+                <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
                   {savedJobs.length}
                 </span>
               )}
             </button>
+
+            {/* CV Builder Tab (CVpop MCP) */}
+            <button
+              onClick={() => setActiveTab('cv-builder')}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
+                activeTab === 'cv-builder'
+                  ? 'bg-slate-800 text-cyan-400 border border-slate-700'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              <span>Draft CV</span>
+            </button>
+
+            {/* Match Scorer Tab (Calibrd MCP) */}
+            <button
+              onClick={() => setActiveTab('cv-scorer')}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
+                activeTab === 'cv-scorer'
+                  ? 'bg-slate-800 text-cyan-400 border border-slate-700'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+              }`}
+            >
+              <Target className="w-4 h-4" />
+              <span>Score CV</span>
+            </button>
           </nav>
 
-          {/* Controls: Theme Toggle & MCP Status */}
+          {/* Controls: Theme Toggle & MCP Ecosystem Status */}
           <div className="flex items-center space-x-2 sm:space-x-3">
             {/* Dark / Light Mode Toggle */}
             <button
@@ -92,31 +113,10 @@ export const Navbar: React.FC = () => {
             <button
               onClick={() => setIsMcpModalOpen(true)}
               className="flex items-center space-x-2 px-3 py-1.5 rounded-lg border text-xs font-mono transition-all bg-slate-950/80 border-slate-800 hover:border-slate-700 text-slate-300"
-              title="Click to inspect JobDataLake MCP connection"
+              title="Inspect JobDataLake, CVpop, and Calibrd MCP connections"
             >
-              <Server className="w-3.5 h-3.5 text-slate-400" />
-              <div className="flex items-center space-x-1.5">
-                <span className="relative flex h-2 w-2">
-                  {isConnected ? (
-                    <>
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                    </>
-                  ) : isSimulated ? (
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
-                  ) : (
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
-                  )}
-                </span>
-                <span className="hidden sm:inline">
-                  {isConnected
-                    ? 'JobDataLake: Live'
-                    : isSimulated
-                    ? 'JobDataLake: Fallback'
-                    : 'JobDataLake: Offline'}
-                </span>
-              </div>
-              <Activity className={`w-3 h-3 text-slate-500 ${isHealthChecking ? 'animate-spin text-cyan-400' : ''}`} />
+              <Server className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden md:inline">MCP Status (3)</span>
             </button>
           </div>
         </div>

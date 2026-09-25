@@ -2,7 +2,7 @@
  * Benchmark fallback dataset & schema for JobDataLake MCP
  */
 
-import { JobListing, McpToolSchema } from './types.ts';
+import { JobListing, JobFilterParams, McpToolSchema } from './types.ts';
 
 export const SAMPLE_JOBS_DATABASE: JobListing[] = [
   {
@@ -163,17 +163,11 @@ export const JOBDATALAKE_FALLBACK_TOOLS: McpToolSchema[] = [
 ];
 
 export class LocalMcpFallbackEngine {
-  public static async searchJobs(params: {
-    keywords?: string;
-    location?: string;
-    experienceLevel?: string;
-    industry?: string;
-    minSalary?: number;
-  }): Promise<JobListing[]> {
+  public static async searchJobs(params: JobFilterParams): Promise<JobListing[]> {
     let results = [...SAMPLE_JOBS_DATABASE];
 
-    if (params.keywords && params.keywords.trim()) {
-      const q = params.keywords.toLowerCase();
+    const q = (params.query || '').toLowerCase().trim();
+    if (q && q !== '*') {
       results = results.filter(
         (job) =>
           job.title.toLowerCase().includes(q) ||
@@ -189,20 +183,47 @@ export class LocalMcpFallbackEngine {
       results = results.filter((job) => job.location.toLowerCase().includes(loc));
     }
 
-    if (params.experienceLevel && params.experienceLevel.trim() && params.experienceLevel.toLowerCase() !== 'all') {
+    if (params.remote_type && params.remote_type !== 'all') {
+      if (params.remote_type === 'fully_remote') {
+        results = results.filter((j) => j.jobType === 'Remote' || j.location.toLowerCase().includes('remote'));
+      } else if (params.remote_type === 'hybrid') {
+        results = results.filter((j) => j.location.toLowerCase().includes('hybrid'));
+      } else if (params.remote_type === 'on_site') {
+        results = results.filter((j) => j.location.toLowerCase().includes('on-site'));
+      }
+    }
+
+    if (params.seniority && params.seniority !== 'all') {
       results = results.filter((job) =>
-        job.experienceLevel.toLowerCase().includes(params.experienceLevel!.toLowerCase()),
+        job.experienceLevel.toLowerCase().includes(params.seniority!.toLowerCase()),
       );
     }
 
-    if (params.industry && params.industry.trim() && params.industry.toLowerCase() !== 'all') {
-      results = results.filter((job) =>
-        job.industry.toLowerCase().includes(params.industry!.toLowerCase()),
-      );
+    if (params.salary_min && params.salary_min > 0) {
+      results = results.filter((job) => (job.salary?.min || 0) >= params.salary_min!);
     }
 
-    if (params.minSalary && params.minSalary > 0) {
-      results = results.filter((job) => (job.salary?.min || 0) >= params.minSalary!);
+    if (params.salary_max && params.salary_max > 0) {
+      results = results.filter((job) => (job.salary?.max || 0) <= params.salary_max!);
+    }
+
+    if (params.skills && params.skills.trim()) {
+      const requiredSkills = params.skills.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+      results = results.filter((job) => {
+        const jobSkills = job.skillsRequired.map((s) => s.toLowerCase());
+        return requiredSkills.every((req) => jobSkills.some((js) => js.includes(req)));
+      });
+    }
+
+    if (params.company && params.company.trim()) {
+      const comp = params.company.toLowerCase();
+      results = results.filter((j) => j.company.toLowerCase().includes(comp));
+    }
+
+    if (params.sort_by === 'salary_max_usd:desc') {
+      results.sort((a, b) => (b.salary?.max || 0) - (a.salary?.max || 0));
+    } else if (params.sort_by === 'salary_min_usd:asc') {
+      results.sort((a, b) => (a.salary?.min || 0) - (b.salary?.min || 0));
     }
 
     return results;

@@ -1,8 +1,14 @@
 /**
- * Client API Service communicating with the server-side JobDataLake MCP endpoints
+ * Client API Service communicating with the server-side JobDataLake, CVpop, and Calibrd MCP endpoints
  */
 
-import { JobListing, McpOverallHealth } from '../types.ts';
+import {
+  JobListing,
+  JobFilterParams,
+  MultiMcpHealthResponse,
+  CvDraftPayload,
+  CalibrdScoreResult,
+} from '../types.ts';
 
 async function safeJsonFetch(url: string, options?: RequestInit): Promise<any> {
   const res = await fetch(url, options);
@@ -12,44 +18,25 @@ async function safeJsonFetch(url: string, options?: RequestInit): Promise<any> {
     return { ok: res.ok, status: res.status, json };
   } catch {
     throw new Error(
-      `Server returned HTTP ${res.status} (${res.statusText || 'Error'}) instead of JSON: ${text.slice(0, 120)}`
+      `Server returned HTTP ${res.status} (${res.statusText || 'Error'}): ${text.slice(0, 120)}`
     );
   }
 }
 
 export const api = {
   /**
-   * Fetch JobDataLake MCP health status
+   * Fetch all MCP health statuses (JobDataLake, CVpop, Calibrd)
    */
-  async getMcpHealth(): Promise<McpOverallHealth> {
-    const { ok, json } = await safeJsonFetch('/api/mcp');
-    if (!ok || !json.success) throw new Error(json?.error || 'Failed to fetch JobDataLake MCP health');
-    return json.data;
+  async getMultiMcpHealth(): Promise<MultiMcpHealthResponse> {
+    const { ok, json } = await safeJsonFetch('/api/mcp?format=json');
+    if (!ok || !json.success) throw new Error(json?.error || 'Failed to fetch MCP ecosystem health');
+    return json.servers;
   },
 
   /**
-   * Toggle MCP Local Fallback / Strict Remote Mode
+   * Search jobs via JobDataLake MCP with complete filter parameters
    */
-  async toggleMcpFallback(allowLocalFallback: boolean): Promise<boolean> {
-    const { ok, json } = await safeJsonFetch('/api/mcp/toggle-fallback', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ allowLocalFallback }),
-    });
-    if (!ok || !json.success) throw new Error(json?.error || 'Failed to toggle fallback');
-    return json.localFallbackActive;
-  },
-
-  /**
-   * Search jobs via JobDataLake MCP
-   */
-  async searchJobs(params: {
-    keywords?: string;
-    location?: string;
-    experienceLevel?: string;
-    industry?: string;
-    minSalary?: number;
-  }): Promise<{ jobs: JobListing[]; source: string; warning?: string }> {
+  async searchJobs(params: JobFilterParams): Promise<{ jobs: JobListing[]; source: string; warning?: string }> {
     const { ok, json } = await safeJsonFetch('/api/jobs/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -69,6 +56,50 @@ export const api = {
   async getJobDetails(id: string): Promise<JobListing> {
     const { ok, json } = await safeJsonFetch(`/api/jobs/${encodeURIComponent(id)}`);
     if (!ok || !json.success) throw new Error(json?.error || 'Failed to fetch job details');
+    return json.data;
+  },
+
+  /**
+   * Create CV preview via CVpop MCP
+   */
+  async createCvPreview(payload: CvDraftPayload) {
+    const { ok, json } = await safeJsonFetch('/api/cv/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!ok || !json.success) throw new Error(json?.error || 'Failed to create CV preview');
+    return json.data;
+  },
+
+  /**
+   * Create CV claim link to continue in CVpop
+   */
+  async createCvClaim(payload: CvDraftPayload) {
+    const { ok, json } = await safeJsonFetch('/api/cv/claim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!ok || !json.success) throw new Error(json?.error || 'Failed to generate CV claim URL');
+    return json.data;
+  },
+
+  /**
+   * Score CV against Job Description via Calibrd MCP
+   */
+  async scoreCvAgainstJob(params: {
+    cv_text: string;
+    job_title: string;
+    job_description: string;
+    level?: string;
+  }): Promise<CalibrdScoreResult> {
+    const { ok, json } = await safeJsonFetch('/api/scoring/score-job', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!ok || !json.success) throw new Error(json?.error || 'Failed to score CV');
     return json.data;
   },
 };
