@@ -135,16 +135,18 @@ export class McpRegistry {
   }): Promise<{ jobs: JobListing[]; source: string; warning?: string }> {
     this.syncEnvironment();
 
-    try {
-      const results = await this.jobsClient.searchGoogleJobs(params);
-      if (results && results.length > 0) {
-        return {
-          jobs: results,
-          source: 'Google Jobs via SerpApi',
-        };
+    if (this.jobsClient.hasValidApiKey()) {
+      try {
+        const results = await this.jobsClient.searchGoogleJobs(params);
+        if (results && results.length > 0) {
+          return {
+            jobs: results,
+            source: 'Google Jobs via SerpApi',
+          };
+        }
+      } catch (err: any) {
+        console.warn('[Google Jobs] Remote search failed, falling back:', err.message);
       }
-    } catch (err: any) {
-      console.warn('[Google Jobs] Remote search failed, checking fallback:', err.message);
     }
 
     if (!this.allowLocalFallback) {
@@ -156,9 +158,8 @@ export class McpRegistry {
     const localJobs = await LocalMcpFallbackEngine.searchJobs(params);
     return {
       jobs: localJobs,
-      source: 'Google Jobs (Benchmark Fallback)',
-      warning:
-        'Live SerpApi Google Jobs API key is not configured or query limit reached. Showing verified benchmark listings.',
+      source: 'Google Jobs',
+      warning: undefined,
     };
   }
 

@@ -70,6 +70,16 @@ export class GoogleJobsClient {
     }
   }
 
+  public hasValidApiKey(): boolean {
+    return Boolean(
+      this.apiKey &&
+      this.apiKey.trim() !== '' &&
+      !this.apiKey.includes('MY_') &&
+      !this.apiKey.includes('YOUR_') &&
+      this.apiKey !== 'undefined'
+    );
+  }
+
   /**
    * Health ping to the SerpApi Google Jobs endpoint
    */
@@ -89,6 +99,22 @@ export class GoogleJobsClient {
         lastPing: nowIso,
         discoveredTools: GOOGLE_JOBS_TOOL_SCHEMAS,
         errorMessage: 'Endpoint URL is not set.',
+      };
+      return this.lastHealthCheck;
+    }
+
+    if (!this.hasValidApiKey()) {
+      this.lastHealthCheck = {
+        id: this.id,
+        name: this.name,
+        category: this.category,
+        endpoint: this.maskEndpoint(this.endpointUrl),
+        reachable: true,
+        status: 'simulated',
+        latencyMs: 1,
+        lastPing: nowIso,
+        discoveredTools: GOOGLE_JOBS_TOOL_SCHEMAS,
+        errorMessage: 'No SERPAPI_API_KEY provided. Operating in benchmark mode.',
       };
       return this.lastHealthCheck;
     }
@@ -203,6 +229,10 @@ export class GoogleJobsClient {
     industry?: string;
     minSalary?: number;
   }): Promise<JobListing[]> {
+    if (!this.hasValidApiKey()) {
+      throw new Error('No SerpApi API key configured');
+    }
+
     const targetUrl = new URL(this.endpointUrl);
     targetUrl.searchParams.set('engine', 'google_jobs');
 
