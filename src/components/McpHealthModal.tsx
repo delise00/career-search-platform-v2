@@ -46,13 +46,13 @@ export const McpHealthModal: React.FC = () => {
             </div>
             <div>
               <h2 className="text-base font-bold text-white flex items-center space-x-2">
-                <span>Google Jobs API Status</span>
+                <span>Google Jobs MCP Status</span>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                  SerpApi
+                  Smithery MCP
                 </span>
               </h2>
               <p className="text-xs text-slate-400">
-                Live Google Jobs connection via SerpApi endpoint
+                Connection to Google Jobs endpoint (Smithery MCP / SerpApi)
               </p>
             </div>
           </div>
@@ -190,7 +190,7 @@ export const McpHealthModal: React.FC = () => {
 
         {/* Footer */}
         <div className="px-6 py-3 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between text-xs text-slate-400">
-          <span>Google Jobs SerpApi Proxy active</span>
+          <span>Google Jobs MCP Proxy active</span>
           <button
             onClick={() => setIsMcpModalOpen(false)}
             className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium transition-colors"

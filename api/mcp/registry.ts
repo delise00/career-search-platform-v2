@@ -1,7 +1,7 @@
 /**
  * Central Google Jobs Service Layer & Client Registry
- * Communicates with SerpApi Google Jobs endpoint:
- * https://serpapi.com/search?engine=google_jobs
+ * Communicates with Smithery MCP server (https://server.smithery.ai/google/jobs)
+ * or SerpApi Google Jobs endpoint (https://serpapi.com/search?engine=google_jobs)
  * with automatic fallback to benchmark dataset when offline or key not provided.
  */
 
@@ -10,7 +10,7 @@ import { GoogleJobsClient } from './client.ts';
 import { McpServerHealth, JobListing } from './types.ts';
 import { LocalMcpFallbackEngine, GOOGLE_JOBS_TOOL_SCHEMAS } from './local-provider.ts';
 
-const DEFAULT_SERPAPI_GOOGLE_JOBS_URL = 'https://serpapi.com/search?engine=google_jobs';
+const DEFAULT_SMITHERY_GOOGLE_JOBS_URL = 'https://server.smithery.ai/google/jobs';
 
 export class McpRegistry {
   private jobsClient: GoogleJobsClient;
@@ -19,11 +19,16 @@ export class McpRegistry {
   constructor() {
     this.allowLocalFallback = process.env.MCP_ENABLE_LOCAL_SIMULATION !== 'false';
 
+    const defaultUrl =
+      process.env.GOOGLE_JOBS_URL ||
+      process.env.SMITHERY_URL ||
+      DEFAULT_SMITHERY_GOOGLE_JOBS_URL;
+
     this.jobsClient = new GoogleJobsClient({
-      id: 'google-jobs-serpapi',
-      name: 'Google Jobs (SerpApi)',
+      id: 'google-jobs-smithery',
+      name: 'Google Jobs (Smithery MCP)',
       category: 'jobs',
-      endpointUrl: process.env.GOOGLE_JOBS_URL || process.env.SERPAPI_URL || DEFAULT_SERPAPI_GOOGLE_JOBS_URL,
+      endpointUrl: defaultUrl,
       timeoutMs: 9000,
     });
 
@@ -48,15 +53,21 @@ export class McpRegistry {
 
     const rawUrl =
       process.env.GOOGLE_JOBS_URL ||
+      process.env.SMITHERY_URL ||
       process.env.SERPAPI_URL ||
-      process.env.SERP_API_URL ||
-      DEFAULT_SERPAPI_GOOGLE_JOBS_URL;
+      DEFAULT_SMITHERY_GOOGLE_JOBS_URL;
 
     let apiKey =
       process.env.SERPAPI_API_KEY ||
       process.env.SERP_API_KEY ||
       process.env.SERPAPI_KEY ||
       process.env.GOOGLE_JOBS_API_KEY ||
+      undefined;
+
+    let smitheryToken =
+      process.env.SMITHERY_API_KEY ||
+      process.env.SMITHERY_TOKEN ||
+      process.env.SMITHERY_KEY ||
       undefined;
 
     if (rawUrl) {
@@ -74,7 +85,7 @@ export class McpRegistry {
       }
     }
 
-    this.jobsClient.updateEndpoint(rawUrl, apiKey);
+    this.jobsClient.updateEndpoint(rawUrl, apiKey, smitheryToken);
   }
 
   public setLocalFallbackAllowed(allowed: boolean) {
@@ -108,8 +119,8 @@ export class McpRegistry {
         reachable: true,
         discoveredTools: GOOGLE_JOBS_TOOL_SCHEMAS,
         errorMessage: rawHealth.errorMessage
-          ? `Remote SerpApi Google Jobs endpoint (${rawHealth.errorMessage}). Serving via local benchmark provider.`
-          : 'Remote SerpApi key not configured. Operating in local Google Jobs benchmark mode.',
+          ? rawHealth.errorMessage
+          : 'Operating in local Google Jobs benchmark mode.',
       };
     } else {
       serverHealth = rawHealth;
@@ -124,7 +135,7 @@ export class McpRegistry {
   }
 
   /**
-   * Search jobs via Google Jobs SerpApi
+   * Search jobs via Google Jobs
    */
   public async searchJobs(params: {
     keywords?: string;
@@ -135,13 +146,15 @@ export class McpRegistry {
   }): Promise<{ jobs: JobListing[]; source: string; warning?: string }> {
     this.syncEnvironment();
 
-    if (this.jobsClient.hasValidApiKey()) {
+    if (this.jobsClient.hasValidCredentials()) {
       try {
         const results = await this.jobsClient.searchGoogleJobs(params);
         if (results && results.length > 0) {
           return {
             jobs: results,
-            source: 'Google Jobs via SerpApi',
+            source: this.jobsClient.isSmitheryEndpoint()
+              ? 'Google Jobs via Smithery MCP'
+              : 'Google Jobs via SerpApi',
           };
         }
       } catch (err: any) {
@@ -151,7 +164,7 @@ export class McpRegistry {
 
     if (!this.allowLocalFallback) {
       throw new Error(
-        'Google Jobs SerpApi service is currently unavailable and local fallback is disabled. Please verify SERPAPI_API_KEY.',
+        'Google Jobs service is currently unavailable and local fallback is disabled. Please verify credentials.',
       );
     }
 

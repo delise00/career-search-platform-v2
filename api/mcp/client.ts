@@ -1,6 +1,6 @@
 /**
- * Client for Google Jobs via SerpApi (https://serpapi.com/search?engine=google_jobs)
- * or MCP endpoints.
+ * Client for Google Jobs via Smithery MCP (https://server.smithery.ai/google/jobs)
+ * or SerpApi (https://serpapi.com/search?engine=google_jobs)
  */
 
 import { JobListing, McpServerHealth, McpToolSchema } from './types.ts';
@@ -12,6 +12,7 @@ export interface GoogleJobsClientOptions {
   category?: 'jobs';
   endpointUrl: string;
   apiKey?: string;
+  smitheryToken?: string;
   timeoutMs?: number;
 }
 
@@ -21,6 +22,7 @@ export class GoogleJobsClient {
   public readonly category: 'jobs';
   private endpointUrl: string;
   private apiKey?: string;
+  private smitheryToken?: string;
   private timeoutMs: number;
   private lastHealthCheck: McpServerHealth;
 
@@ -30,6 +32,7 @@ export class GoogleJobsClient {
     this.category = options.category || 'jobs';
     this.endpointUrl = options.endpointUrl;
     this.apiKey = options.apiKey;
+    this.smitheryToken = options.smitheryToken;
     this.timeoutMs = options.timeoutMs || 8000;
 
     this.lastHealthCheck = {
@@ -46,10 +49,50 @@ export class GoogleJobsClient {
     };
   }
 
-  public updateEndpoint(url: string, apiKey?: string) {
+  public updateEndpoint(url: string, apiKey?: string, smitheryToken?: string) {
     this.endpointUrl = url;
     if (apiKey !== undefined) this.apiKey = apiKey;
+    if (smitheryToken !== undefined) this.smitheryToken = smitheryToken;
     this.lastHealthCheck.endpoint = this.maskEndpoint(this.endpointUrl);
+  }
+
+  public isSmitheryEndpoint(): boolean {
+    return (
+      this.endpointUrl.includes('smithery.ai') ||
+      this.endpointUrl.includes('run.tools')
+    );
+  }
+
+  public hasValidCredentials(): boolean {
+    if (this.isSmitheryEndpoint()) {
+      return Boolean(
+        this.smitheryToken &&
+        this.smitheryToken.trim() !== '' &&
+        !this.smitheryToken.includes('MY_') &&
+        !this.smitheryToken.includes('YOUR_')
+      );
+    }
+    return Boolean(
+      this.apiKey &&
+      this.apiKey.trim() !== '' &&
+      !this.apiKey.includes('MY_') &&
+      !this.apiKey.includes('YOUR_') &&
+      this.apiKey !== 'undefined'
+    );
+  }
+
+  public hasValidApiKey(): boolean {
+    return this.hasValidCredentials();
+  }
+
+  public maskEndpoint(url: string): string {
+    if (!url) return 'Not configured';
+    try {
+      const parsed = new URL(url);
+      return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+    } catch {
+      return url.replace(/([?&]api[-_]?key=)[^&]+/i, '$1***');
+    }
   }
 
   public getLastHealth(): McpServerHealth {
@@ -60,28 +103,8 @@ export class GoogleJobsClient {
     return GOOGLE_JOBS_TOOL_SCHEMAS;
   }
 
-  private maskEndpoint(url: string): string {
-    if (!url) return 'Not configured';
-    try {
-      const parsed = new URL(url);
-      return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
-    } catch {
-      return url.replace(/([?&]api[-_]?key=)[^&]+/i, '$1***');
-    }
-  }
-
-  public hasValidApiKey(): boolean {
-    return Boolean(
-      this.apiKey &&
-      this.apiKey.trim() !== '' &&
-      !this.apiKey.includes('MY_') &&
-      !this.apiKey.includes('YOUR_') &&
-      this.apiKey !== 'undefined'
-    );
-  }
-
   /**
-   * Health ping to the SerpApi Google Jobs endpoint
+   * Health ping to the configured Google Jobs endpoint
    */
   public async checkHealth(): Promise<McpServerHealth> {
     const startTime = Date.now();
@@ -103,10 +126,14 @@ export class GoogleJobsClient {
       return this.lastHealthCheck;
     }
 
-    if (!this.hasValidApiKey()) {
+    if (!this.hasValidCredentials()) {
+      const msg = this.isSmitheryEndpoint()
+        ? 'Smithery MCP endpoint configured (https://server.smithery.ai/google/jobs). Ready in benchmark mode (or configure SMITHERY_API_KEY for live queries).'
+        : 'Google Jobs endpoint configured. Operating in benchmark mode (or configure SERPAPI_API_KEY for live queries).';
+
       this.lastHealthCheck = {
         id: this.id,
-        name: this.name,
+        name: this.isSmitheryEndpoint() ? 'Google Jobs (Smithery MCP)' : this.name,
         category: this.category,
         endpoint: this.maskEndpoint(this.endpointUrl),
         reachable: true,
@@ -114,12 +141,79 @@ export class GoogleJobsClient {
         latencyMs: 1,
         lastPing: nowIso,
         discoveredTools: GOOGLE_JOBS_TOOL_SCHEMAS,
-        errorMessage: 'No SERPAPI_API_KEY provided. Operating in benchmark mode.',
+        errorMessage: msg,
       };
       return this.lastHealthCheck;
     }
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+
+      if (this.isSmitheryEndpoint()) {
+        const res = await fetch(this.endpointUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.smitheryToken}`,
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'tools/list',
+            params: {},
+          }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+        const latencyMs = Date.now() - startTime;
+
+        if (!res.ok) {
+          const errorText = await res.text();
+          let message = `HTTP ${res.status}: ${res.statusText}`;
+          try {
+            const parsed = JSON.parse(errorText);
+            if (parsed.error_description) message = parsed.error_description;
+            else if (parsed.message) message = parsed.message;
+            else if (parsed.error) message = typeof parsed.error === 'string' ? parsed.error : JSON.stringify(parsed.error);
+          } catch {
+            // ignore
+          }
+          this.lastHealthCheck = {
+            id: this.id,
+            name: 'Google Jobs (Smithery MCP)',
+            category: this.category,
+            endpoint: this.maskEndpoint(this.endpointUrl),
+            reachable: false,
+            status: 'error',
+            latencyMs,
+            lastPing: nowIso,
+            discoveredTools: GOOGLE_JOBS_TOOL_SCHEMAS,
+            errorMessage: message,
+          };
+          return this.lastHealthCheck;
+        }
+
+        const data = await res.json();
+        const tools = Array.isArray(data.result?.tools) ? data.result.tools : GOOGLE_JOBS_TOOL_SCHEMAS;
+
+        this.lastHealthCheck = {
+          id: this.id,
+          name: 'Google Jobs (Smithery MCP)',
+          category: this.category,
+          endpoint: this.maskEndpoint(this.endpointUrl),
+          reachable: true,
+          status: 'connected',
+          latencyMs,
+          lastPing: nowIso,
+          discoveredTools: tools,
+          protocolVersion: 'Smithery MCP / JSON-RPC 2.0',
+        };
+        return this.lastHealthCheck;
+      }
+
+      // SerpApi endpoint
       const targetUrl = new URL(this.endpointUrl);
       if (this.apiKey && !targetUrl.searchParams.has('api_key')) {
         targetUrl.searchParams.set('api_key', this.apiKey);
@@ -127,13 +221,9 @@ export class GoogleJobsClient {
       if (!targetUrl.searchParams.has('engine')) {
         targetUrl.searchParams.set('engine', 'google_jobs');
       }
-      // Send a lightweight test query
       if (!targetUrl.searchParams.has('q')) {
         targetUrl.searchParams.set('q', 'developer');
       }
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
       const res = await fetch(targetUrl.toString(), {
         method: 'GET',
@@ -220,7 +310,7 @@ export class GoogleJobsClient {
   }
 
   /**
-   * Search jobs using Google Jobs SerpApi endpoint
+   * Search jobs using Google Jobs (Smithery MCP or SerpApi)
    */
   public async searchGoogleJobs(params: {
     keywords?: string;
@@ -229,10 +319,126 @@ export class GoogleJobsClient {
     industry?: string;
     minSalary?: number;
   }): Promise<JobListing[]> {
-    if (!this.hasValidApiKey()) {
-      throw new Error('No SerpApi API key configured');
+    if (!this.hasValidCredentials()) {
+      throw new Error('No API credentials configured');
     }
 
+    if (this.isSmitheryEndpoint()) {
+      return this.searchViaSmitheryMcp(params);
+    }
+    return this.searchViaSerpApi(params);
+  }
+
+  private async searchViaSmitheryMcp(params: {
+    keywords?: string;
+    location?: string;
+    experienceLevel?: string;
+    industry?: string;
+    minSalary?: number;
+  }): Promise<JobListing[]> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    const queryParts: string[] = [];
+    if (params.keywords && params.keywords.trim()) queryParts.push(params.keywords.trim());
+    else queryParts.push('software developer');
+    if (params.industry && params.industry !== 'All') queryParts.push(params.industry);
+    if (params.experienceLevel && params.experienceLevel !== 'All') queryParts.push(params.experienceLevel);
+
+    const res = await fetch(this.endpointUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.smitheryToken}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method: 'tools/call',
+        params: {
+          name: 'search_jobs',
+          arguments: {
+            query: queryParts.join(' '),
+            location: params.location && params.location !== 'All' ? params.location : undefined,
+          },
+        },
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      const text = await res.text();
+      let errMsg = `Smithery MCP error HTTP ${res.status}`;
+      try {
+        const j = JSON.parse(text);
+        if (j.error_description) errMsg = j.error_description;
+        else if (j.message) errMsg = j.message;
+        else if (j.error) errMsg = typeof j.error === 'string' ? j.error : JSON.stringify(j.error);
+      } catch {
+        // ignore
+      }
+      throw new Error(errMsg);
+    }
+
+    const data = await res.json();
+    if (data.error) {
+      throw new Error(typeof data.error === 'string' ? data.error : data.error.message || 'Smithery error');
+    }
+
+    let parsedContent: any = null;
+    const content = data.result?.content;
+    if (Array.isArray(content) && content.length > 0) {
+      const textBlock = content.find((c: any) => c.type === 'text' || typeof c.text === 'string');
+      if (textBlock?.text) {
+        try {
+          parsedContent = JSON.parse(textBlock.text);
+        } catch {
+          parsedContent = textBlock.text;
+        }
+      }
+    }
+
+    const jobResults = Array.isArray(parsedContent?.jobs_results)
+      ? parsedContent.jobs_results
+      : Array.isArray(parsedContent)
+      ? parsedContent
+      : [];
+
+    return jobResults.map((raw: any, index: number): JobListing => {
+      const title = raw.title || 'Untitled Role';
+      const company = raw.company_name || raw.company || 'Hiring Organization';
+      const location = raw.location || 'Multiple Locations';
+      const description = raw.description || '';
+      const applyLink = raw.apply_options?.[0]?.link || raw.share_link || raw.link || undefined;
+
+      return {
+        id: raw.job_id || `smithery-job-${index}-${Date.now()}`,
+        title,
+        company,
+        location,
+        salary: raw.salary ? { currency: 'USD', period: 'yearly' } : undefined,
+        description,
+        requirements: ['See full description on Google Jobs.'],
+        skillsRequired: ['Google Jobs Verified', 'Smithery MCP'],
+        experienceLevel: params.experienceLevel && params.experienceLevel !== 'All' ? (params.experienceLevel as any) : 'Mid-Level',
+        jobType: 'Full-time',
+        industry: params.industry && params.industry !== 'All' ? params.industry : 'Technology',
+        postedDate: raw.posted_at || 'Recently posted',
+        source: 'Google Jobs via Smithery MCP',
+        applyLink,
+      };
+    });
+  }
+
+  private async searchViaSerpApi(params: {
+    keywords?: string;
+    location?: string;
+    experienceLevel?: string;
+    industry?: string;
+    minSalary?: number;
+  }): Promise<JobListing[]> {
     const targetUrl = new URL(this.endpointUrl);
     targetUrl.searchParams.set('engine', 'google_jobs');
 
@@ -240,7 +446,6 @@ export class GoogleJobsClient {
       targetUrl.searchParams.set('api_key', this.apiKey);
     }
 
-    // Build query
     const queryParts: string[] = [];
     if (params.keywords && params.keywords.trim()) {
       queryParts.push(params.keywords.trim());
@@ -293,7 +498,6 @@ export class GoogleJobsClient {
 
     const rawJobs: any[] = data.jobs_results || [];
 
-    // Map SerpApi Google Jobs results to JobListing format
     return rawJobs.map((raw: any, index: number): JobListing => {
       const title = raw.title || 'Untitled Role';
       const company = raw.company_name || 'Hiring Organization';
@@ -305,7 +509,6 @@ export class GoogleJobsClient {
         ? raw.extensions
         : [];
 
-      // Detect salary if present in extensions
       let salary: JobListing['salary'] = undefined;
       const salaryText = extensions.find((e) =>
         e.includes('$') || e.toLowerCase().includes('salary') || e.toLowerCase().includes('a year') || e.toLowerCase().includes('an hour')
@@ -317,17 +520,11 @@ export class GoogleJobsClient {
         };
       }
 
-      // Detect posted date
       const postedDate = extensions.find((e) => e.toLowerCase().includes('ago') || e.toLowerCase().includes('yesterday') || e.toLowerCase().includes('just')) || 'Recently posted';
-
-      // Detect job type
       const jobTypeStr = extensions.find((e) => e.toLowerCase().includes('full-time') || e.toLowerCase().includes('part-time') || e.toLowerCase().includes('contract'));
       const jobType: JobListing['jobType'] = jobTypeStr?.toLowerCase().includes('part') ? 'Part-time' : jobTypeStr?.toLowerCase().includes('contract') ? 'Contract' : 'Full-time';
-
-      // Parse apply link
       const applyLink = raw.apply_options?.[0]?.link || raw.share_link || undefined;
 
-      // Extract skills / highlights
       const skillsRequired: string[] = [];
       if (Array.isArray(raw.job_highlights)) {
         for (const highlight of raw.job_highlights) {
@@ -342,7 +539,6 @@ export class GoogleJobsClient {
         skillsRequired.push('Google Jobs Verified');
       }
 
-      // Requirements from job_highlights
       const requirements: string[] = [];
       const qualHighlight = raw.job_highlights?.find((h: any) => h.title?.toLowerCase().includes('qualification'));
       if (qualHighlight && Array.isArray(qualHighlight.items)) {

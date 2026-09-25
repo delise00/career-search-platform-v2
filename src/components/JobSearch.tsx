@@ -32,7 +32,7 @@ export const JobSearch: React.FC = () => {
   const [experienceFilter, setExperienceFilter] = useState('All');
   const [industryFilter, setIndustryFilter] = useState('All');
   const [searchWarning, setSearchWarning] = useState<string | null>(null);
-  const [searchSource, setSearchSource] = useState<string>('Google Jobs via SerpApi');
+  const [searchSource, setSearchSource] = useState<string>('Google Jobs');
   const [activeJobModal, setActiveJobModal] = useState<JobListing | null>(null);
 
   const fetchJobs = async () => {

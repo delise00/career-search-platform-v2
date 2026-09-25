@@ -34,7 +34,7 @@ export const Navbar: React.FC = () => {
                   Google Jobs
                 </span>
               </div>
-              <p className="text-xs text-slate-400">Powered by SerpApi Google Jobs Engine</p>
+              <p className="text-xs text-slate-400">Powered by Google Jobs MCP Engine</p>
             </div>
           </div>
 
