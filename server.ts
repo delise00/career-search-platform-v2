@@ -1,4 +1,5 @@
 import express from 'express';
+import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -6,6 +7,25 @@ import dotenv from 'dotenv';
 import apiRouter from './api/routes.ts';
 
 dotenv.config();
+
+// Load AI Studio container secrets from /app/.dev.env.json if present
+function loadContainerSecrets() {
+  const devEnvPath = '/app/.dev.env.json';
+  try {
+    if (fs.existsSync(devEnvPath)) {
+      const raw = fs.readFileSync(devEnvPath, 'utf8');
+      const data = JSON.parse(raw);
+      for (const [key, val] of Object.entries(data)) {
+        if (typeof val === 'string' && val.trim() !== '') {
+          process.env[key] = val;
+        }
+      }
+    }
+  } catch (err) {
+    // Ignore container secret reading errors
+  }
+}
+loadContainerSecrets();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

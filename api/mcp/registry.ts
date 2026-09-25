@@ -3,6 +3,7 @@
  * Manages Indeed MCP client connection, tool discovery, fallback routing, and health check.
  */
 
+import fs from 'fs';
 import { McpClient } from './client.ts';
 import { McpServerHealth, JobListing } from './types.ts';
 import { LocalMcpFallbackEngine, INDEED_TOOL_SCHEMAS } from './local-provider.ts';
@@ -19,9 +20,63 @@ export class McpRegistry {
       name: 'Indeed Job Search MCP',
       category: 'jobs',
       endpointUrl: process.env.MCP_INDEED_URL || process.env.INDEED_MCP_URL || '',
-      apiKey: process.env.MCP_INDEED_API_KEY || process.env.INDEED_API_KEY,
-      timeoutMs: 5000,
+      timeoutMs: 8000,
     });
+
+    this.syncEnvironment();
+  }
+
+  public syncEnvironment() {
+    const devEnvPath = '/app/.dev.env.json';
+    try {
+      if (fs.existsSync(devEnvPath)) {
+        const raw = fs.readFileSync(devEnvPath, 'utf8');
+        const data = JSON.parse(raw);
+        for (const [key, val] of Object.entries(data)) {
+          if (typeof val === 'string' && val.trim() !== '') {
+            process.env[key] = val;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    const rawUrl =
+      process.env.MCP_INDEED_URL ||
+      process.env.INDEED_MCP_URL ||
+      process.env.mcp_indeed_url ||
+      '';
+
+    let apiKey =
+      process.env.MCP_INDEED_API_KEY ||
+      process.env.INDEED_API_KEY ||
+      process.env.MCP_INDEED_KEY ||
+      process.env.HASDATA_API_KEY ||
+      process.env.MCP_API_KEY ||
+      process.env.MCP_AI_HR_API_KEY ||
+      undefined;
+
+    if (rawUrl) {
+      try {
+        const parsed = new URL(rawUrl);
+        const keyInParam =
+          parsed.searchParams.get('apiKey') ||
+          parsed.searchParams.get('api_key') ||
+          parsed.searchParams.get('x-api-key') ||
+          parsed.searchParams.get('key') ||
+          parsed.searchParams.get('token');
+        if (keyInParam && !apiKey) {
+          apiKey = keyInParam;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (rawUrl) {
+      this.indeedClient.updateEndpoint(rawUrl, apiKey);
+    }
   }
 
   public setLocalFallbackAllowed(allowed: boolean) {
@@ -41,6 +96,7 @@ export class McpRegistry {
     localFallbackActive: boolean;
     timestamp: string;
   }> {
+    this.syncEnvironment();
     const rawHealth = await this.indeedClient.checkHealth();
 
     let serverHealth: McpServerHealth;
@@ -79,6 +135,7 @@ export class McpRegistry {
     industry?: string;
     minSalary?: number;
   }): Promise<{ jobs: JobListing[]; source: string; warning?: string }> {
+    this.syncEnvironment();
     // Attempt remote Indeed MCP tool call if connected
     if (this.indeedClient.getLastHealth().status === 'connected') {
       try {
@@ -125,6 +182,7 @@ export class McpRegistry {
    * Get job details by ID via Indeed MCP
    */
   public async getJobDetails(jobId: string): Promise<{ job: JobListing | null; source: string }> {
+    this.syncEnvironment();
     if (this.indeedClient.getLastHealth().status === 'connected') {
       try {
         const remoteTools = this.indeedClient.getDiscoveredTools();
