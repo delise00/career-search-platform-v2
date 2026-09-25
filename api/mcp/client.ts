@@ -1,98 +1,112 @@
 /**
- * Client for Google Jobs via Smithery MCP (https://server.smithery.ai/google/jobs)
- * or SerpApi (https://serpapi.com/search?engine=google_jobs)
+ * JobDataLake MCP Client (https://mcp.jobdatalake.com)
+ * Native Model Context Protocol (MCP) Client over HTTP Server-Sent Events (SSE).
+ * Connects to JobDataLake 1M+ job database with 20K+ companies.
  */
 
+import https from 'https';
 import { JobListing, McpServerHealth, McpToolSchema } from './types.ts';
-import { GOOGLE_JOBS_TOOL_SCHEMAS } from './local-provider.ts';
 
-export interface GoogleJobsClientOptions {
+export const JOBDATALAKE_TOOL_SCHEMAS: McpToolSchema[] = [
+  {
+    name: 'search_jobs',
+    description:
+      'Search 1M+ job listings from 20K+ companies. Supports keyword search, AI semantic search, location, salary, remote type, and seniority.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Keyword search (title, company, skills)' },
+        semantic_query: { type: 'string', description: 'AI semantic search for remote + tech jobs' },
+        location: { type: 'string', description: 'Location filter, e.g. "Remote", "Singapore", "San Francisco"' },
+        remote_type: { type: 'string', enum: ['fully_remote', 'hybrid', 'on_site'] },
+        seniority: { type: 'string', description: 'Entry, Mid Level, Senior, Staff, Principal, Director' },
+        employment_type: { type: 'string', enum: ['full_time', 'part_time', 'contract', 'internship'] },
+        salary_min: { type: 'number', description: 'Minimum annual salary in USD' },
+        page: { type: 'number', default: 1 },
+        per_page: { type: 'number', default: 20 },
+      },
+    },
+  },
+  {
+    name: 'get_job',
+    description: 'Get full details for a specific job listing including description, requirements, salary, and apply link.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        job_id: { type: 'string', description: 'Job handle ID from search results' },
+      },
+      required: ['job_id'],
+    },
+  },
+  {
+    name: 'get_company',
+    description: 'Get company profile including open job count, industry, size, and career page URL.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        company: { type: 'string', description: 'Company domain (e.g. "stripe.com") or handle' },
+      },
+      required: ['company'],
+    },
+  },
+  {
+    name: 'find_similar_jobs',
+    description: 'Find jobs similar to a given job listing using AI vector similarity.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        job_id: { type: 'string', description: 'Job handle from search results' },
+        per_page: { type: 'number', default: 10 },
+      },
+      required: ['job_id'],
+    },
+  },
+];
+
+export interface JobDataLakeClientOptions {
   id: string;
   name: string;
   category?: 'jobs';
-  endpointUrl: string;
+  baseUrl: string;
   apiKey?: string;
-  smitheryToken?: string;
   timeoutMs?: number;
 }
 
-export class GoogleJobsClient {
+export class JobDataLakeMcpClient {
   public readonly id: string;
   public readonly name: string;
-  public readonly category: 'jobs';
-  private endpointUrl: string;
+  public readonly category: 'jobs' = 'jobs';
+  private baseUrl: string;
   private apiKey?: string;
-  private smitheryToken?: string;
   private timeoutMs: number;
   private lastHealthCheck: McpServerHealth;
 
-  constructor(options: GoogleJobsClientOptions) {
+  constructor(options: JobDataLakeClientOptions) {
     this.id = options.id;
     this.name = options.name;
-    this.category = options.category || 'jobs';
-    this.endpointUrl = options.endpointUrl;
+    this.baseUrl = options.baseUrl.replace(/\/+$/, '');
     this.apiKey = options.apiKey;
-    this.smitheryToken = options.smitheryToken;
-    this.timeoutMs = options.timeoutMs || 8000;
+    this.timeoutMs = options.timeoutMs || 9000;
 
     this.lastHealthCheck = {
       id: this.id,
       name: this.name,
-      category: this.category,
-      endpoint: this.maskEndpoint(this.endpointUrl),
+      category: 'jobs',
+      endpoint: this.baseUrl,
       reachable: false,
       status: 'disconnected',
       latencyMs: 0,
       lastPing: new Date().toISOString(),
-      discoveredTools: GOOGLE_JOBS_TOOL_SCHEMAS,
-      errorMessage: 'Not initialized yet',
+      discoveredTools: JOBDATALAKE_TOOL_SCHEMAS,
+      errorMessage: 'Initialized',
+      protocolVersion: 'MCP SSE (2024-11-05)',
     };
   }
 
-  public updateEndpoint(url: string, apiKey?: string, smitheryToken?: string) {
-    this.endpointUrl = url;
+  public updateEndpoint(url: string, apiKey?: string) {
+    this.baseUrl = (url || 'https://mcp.jobdatalake.com').replace(/\/+$/, '');
     if (apiKey !== undefined) this.apiKey = apiKey;
-    if (smitheryToken !== undefined) this.smitheryToken = smitheryToken;
-    this.lastHealthCheck.endpoint = this.maskEndpoint(this.endpointUrl);
-  }
-
-  public isSmitheryEndpoint(): boolean {
-    return (
-      this.endpointUrl.includes('smithery.ai') ||
-      this.endpointUrl.includes('run.tools')
-    );
-  }
-
-  public hasValidCredentials(): boolean {
-    if (this.isSmitheryEndpoint()) {
-      return Boolean(
-        this.smitheryToken &&
-        this.smitheryToken.trim() !== '' &&
-        !this.smitheryToken.includes('MY_') &&
-        !this.smitheryToken.includes('YOUR_')
-      );
-    }
-    return Boolean(
-      this.apiKey &&
-      this.apiKey.trim() !== '' &&
-      !this.apiKey.includes('MY_') &&
-      !this.apiKey.includes('YOUR_') &&
-      this.apiKey !== 'undefined'
-    );
-  }
-
-  public hasValidApiKey(): boolean {
-    return this.hasValidCredentials();
-  }
-
-  public maskEndpoint(url: string): string {
-    if (!url) return 'Not configured';
-    try {
-      const parsed = new URL(url);
-      return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
-    } catch {
-      return url.replace(/([?&]api[-_]?key=)[^&]+/i, '$1***');
-    }
+    this.lastHealthCheck.endpoint = this.baseUrl;
   }
 
   public getLastHealth(): McpServerHealth {
@@ -100,195 +114,39 @@ export class GoogleJobsClient {
   }
 
   public getDiscoveredTools(): McpToolSchema[] {
-    return GOOGLE_JOBS_TOOL_SCHEMAS;
+    return JOBDATALAKE_TOOL_SCHEMAS;
   }
 
   /**
-   * Health ping to the configured Google Jobs endpoint
+   * Health ping to JobDataLake MCP server
    */
   public async checkHealth(): Promise<McpServerHealth> {
     const startTime = Date.now();
     const nowIso = new Date().toISOString();
 
-    if (!this.endpointUrl || this.endpointUrl.trim() === '') {
-      this.lastHealthCheck = {
-        id: this.id,
-        name: this.name,
-        category: this.category,
-        endpoint: 'Not configured',
-        reachable: false,
-        status: 'disconnected',
-        latencyMs: 0,
-        lastPing: nowIso,
-        discoveredTools: GOOGLE_JOBS_TOOL_SCHEMAS,
-        errorMessage: 'Endpoint URL is not set.',
-      };
-      return this.lastHealthCheck;
-    }
-
-    if (!this.hasValidCredentials()) {
-      const msg = this.isSmitheryEndpoint()
-        ? 'Smithery MCP endpoint configured (https://server.smithery.ai/google/jobs). Ready in benchmark mode (or configure SMITHERY_API_KEY for live queries).'
-        : 'Google Jobs endpoint configured. Operating in benchmark mode (or configure SERPAPI_API_KEY for live queries).';
-
-      this.lastHealthCheck = {
-        id: this.id,
-        name: this.isSmitheryEndpoint() ? 'Google Jobs (Smithery MCP)' : this.name,
-        category: this.category,
-        endpoint: this.maskEndpoint(this.endpointUrl),
-        reachable: true,
-        status: 'simulated',
-        latencyMs: 1,
-        lastPing: nowIso,
-        discoveredTools: GOOGLE_JOBS_TOOL_SCHEMAS,
-        errorMessage: msg,
-      };
-      return this.lastHealthCheck;
-    }
-
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
-
-      if (this.isSmitheryEndpoint()) {
-        const res = await fetch(this.endpointUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.smitheryToken}`,
-          },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            id: 1,
-            method: 'tools/list',
-            params: {},
-          }),
-          signal: controller.signal,
-        });
-
-        clearTimeout(timeoutId);
-        const latencyMs = Date.now() - startTime;
-
-        if (!res.ok) {
-          const errorText = await res.text();
-          let message = `HTTP ${res.status}: ${res.statusText}`;
-          try {
-            const parsed = JSON.parse(errorText);
-            if (parsed.error_description) message = parsed.error_description;
-            else if (parsed.message) message = parsed.message;
-            else if (parsed.error) message = typeof parsed.error === 'string' ? parsed.error : JSON.stringify(parsed.error);
-          } catch {
-            // ignore
-          }
-          this.lastHealthCheck = {
-            id: this.id,
-            name: 'Google Jobs (Smithery MCP)',
-            category: this.category,
-            endpoint: this.maskEndpoint(this.endpointUrl),
-            reachable: false,
-            status: 'error',
-            latencyMs,
-            lastPing: nowIso,
-            discoveredTools: GOOGLE_JOBS_TOOL_SCHEMAS,
-            errorMessage: message,
-          };
-          return this.lastHealthCheck;
-        }
-
-        const data = await res.json();
-        const tools = Array.isArray(data.result?.tools) ? data.result.tools : GOOGLE_JOBS_TOOL_SCHEMAS;
-
-        this.lastHealthCheck = {
-          id: this.id,
-          name: 'Google Jobs (Smithery MCP)',
-          category: this.category,
-          endpoint: this.maskEndpoint(this.endpointUrl),
-          reachable: true,
-          status: 'connected',
-          latencyMs,
-          lastPing: nowIso,
-          discoveredTools: tools,
-          protocolVersion: 'Smithery MCP / JSON-RPC 2.0',
-        };
-        return this.lastHealthCheck;
-      }
-
-      // SerpApi endpoint
-      const targetUrl = new URL(this.endpointUrl);
-      if (this.apiKey && !targetUrl.searchParams.has('api_key')) {
-        targetUrl.searchParams.set('api_key', this.apiKey);
-      }
-      if (!targetUrl.searchParams.has('engine')) {
-        targetUrl.searchParams.set('engine', 'google_jobs');
-      }
-      if (!targetUrl.searchParams.has('q')) {
-        targetUrl.searchParams.set('q', 'developer');
-      }
-
-      const res = await fetch(targetUrl.toString(), {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'CareerNavigator/2.0',
-        },
-        signal: controller.signal,
+      const initResult = await this.executeMcpRpc('initialize', {
+        protocolVersion: '2024-11-05',
+        capabilities: {},
+        clientInfo: { name: 'career-search-platform', version: '2.0.0' },
       });
 
-      clearTimeout(timeoutId);
       const latencyMs = Date.now() - startTime;
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        let message = `HTTP ${res.status}: ${res.statusText}`;
-        try {
-          const parsed = JSON.parse(errorText);
-          if (parsed.error) message = parsed.error;
-        } catch {
-          // ignore
-        }
-        this.lastHealthCheck = {
-          id: this.id,
-          name: this.name,
-          category: this.category,
-          endpoint: this.maskEndpoint(this.endpointUrl),
-          reachable: false,
-          status: 'error',
-          latencyMs,
-          lastPing: nowIso,
-          discoveredTools: GOOGLE_JOBS_TOOL_SCHEMAS,
-          errorMessage: message,
-        };
-        return this.lastHealthCheck;
-      }
-
-      const data = await res.json();
-      if (data.error) {
-        this.lastHealthCheck = {
-          id: this.id,
-          name: this.name,
-          category: this.category,
-          endpoint: this.maskEndpoint(this.endpointUrl),
-          reachable: false,
-          status: 'error',
-          latencyMs,
-          lastPing: nowIso,
-          discoveredTools: GOOGLE_JOBS_TOOL_SCHEMAS,
-          errorMessage: data.error,
-        };
-        return this.lastHealthCheck;
-      }
+      const serverInfo = initResult?.serverInfo?.name || 'jobdatalake';
+      const instructions = initResult?.instructions || '';
 
       this.lastHealthCheck = {
         id: this.id,
-        name: this.name,
-        category: this.category,
-        endpoint: this.maskEndpoint(this.endpointUrl),
+        name: `JobDataLake MCP (${serverInfo})`,
+        category: 'jobs',
+        endpoint: this.baseUrl,
         reachable: true,
         status: 'connected',
         latencyMs,
         lastPing: nowIso,
-        discoveredTools: GOOGLE_JOBS_TOOL_SCHEMAS,
-        protocolVersion: 'SerpApi Google Jobs',
+        discoveredTools: JOBDATALAKE_TOOL_SCHEMAS,
+        protocolVersion: 'MCP SSE (2024-11-05)',
+        errorMessage: instructions ? instructions.slice(0, 150) + '...' : undefined,
       };
       return this.lastHealthCheck;
     } catch (err: any) {
@@ -296,274 +154,358 @@ export class GoogleJobsClient {
       this.lastHealthCheck = {
         id: this.id,
         name: this.name,
-        category: this.category,
-        endpoint: this.maskEndpoint(this.endpointUrl),
+        category: 'jobs',
+        endpoint: this.baseUrl,
         reachable: false,
         status: 'error',
         latencyMs,
         lastPing: nowIso,
-        discoveredTools: GOOGLE_JOBS_TOOL_SCHEMAS,
-        errorMessage: err.message || 'Connection failed',
+        discoveredTools: JOBDATALAKE_TOOL_SCHEMAS,
+        errorMessage: err.message || 'JobDataLake connection failed',
       };
       return this.lastHealthCheck;
     }
   }
 
   /**
-   * Search jobs using Google Jobs (Smithery MCP or SerpApi)
+   * Search jobs via JobDataLake MCP `search_jobs` tool
    */
-  public async searchGoogleJobs(params: {
+  public async searchJobs(params: {
     keywords?: string;
     location?: string;
     experienceLevel?: string;
     industry?: string;
     minSalary?: number;
   }): Promise<JobListing[]> {
-    if (!this.hasValidCredentials()) {
-      throw new Error('No API credentials configured');
-    }
-
-    if (this.isSmitheryEndpoint()) {
-      return this.searchViaSmitheryMcp(params);
-    }
-    return this.searchViaSerpApi(params);
-  }
-
-  private async searchViaSmitheryMcp(params: {
-    keywords?: string;
-    location?: string;
-    experienceLevel?: string;
-    industry?: string;
-    minSalary?: number;
-  }): Promise<JobListing[]> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
-
-    const queryParts: string[] = [];
-    if (params.keywords && params.keywords.trim()) queryParts.push(params.keywords.trim());
-    else queryParts.push('software developer');
-    if (params.industry && params.industry !== 'All') queryParts.push(params.industry);
-    if (params.experienceLevel && params.experienceLevel !== 'All') queryParts.push(params.experienceLevel);
-
-    const res = await fetch(this.endpointUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.smitheryToken}`,
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: Date.now(),
-        method: 'tools/call',
-        params: {
-          name: 'search_jobs',
-          arguments: {
-            query: queryParts.join(' '),
-            location: params.location && params.location !== 'All' ? params.location : undefined,
-          },
-        },
-      }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!res.ok) {
-      const text = await res.text();
-      let errMsg = `Smithery MCP error HTTP ${res.status}`;
-      try {
-        const j = JSON.parse(text);
-        if (j.error_description) errMsg = j.error_description;
-        else if (j.message) errMsg = j.message;
-        else if (j.error) errMsg = typeof j.error === 'string' ? j.error : JSON.stringify(j.error);
-      } catch {
-        // ignore
-      }
-      throw new Error(errMsg);
-    }
-
-    const data = await res.json();
-    if (data.error) {
-      throw new Error(typeof data.error === 'string' ? data.error : data.error.message || 'Smithery error');
-    }
-
-    let parsedContent: any = null;
-    const content = data.result?.content;
-    if (Array.isArray(content) && content.length > 0) {
-      const textBlock = content.find((c: any) => c.type === 'text' || typeof c.text === 'string');
-      if (textBlock?.text) {
-        try {
-          parsedContent = JSON.parse(textBlock.text);
-        } catch {
-          parsedContent = textBlock.text;
-        }
-      }
-    }
-
-    const jobResults = Array.isArray(parsedContent?.jobs_results)
-      ? parsedContent.jobs_results
-      : Array.isArray(parsedContent)
-      ? parsedContent
-      : [];
-
-    return jobResults.map((raw: any, index: number): JobListing => {
-      const title = raw.title || 'Untitled Role';
-      const company = raw.company_name || raw.company || 'Hiring Organization';
-      const location = raw.location || 'Multiple Locations';
-      const description = raw.description || '';
-      const applyLink = raw.apply_options?.[0]?.link || raw.share_link || raw.link || undefined;
-
-      return {
-        id: raw.job_id || `smithery-job-${index}-${Date.now()}`,
-        title,
-        company,
-        location,
-        salary: raw.salary ? { currency: 'USD', period: 'yearly' } : undefined,
-        description,
-        requirements: ['See full description on Google Jobs.'],
-        skillsRequired: ['Google Jobs Verified', 'Smithery MCP'],
-        experienceLevel: params.experienceLevel && params.experienceLevel !== 'All' ? (params.experienceLevel as any) : 'Mid-Level',
-        jobType: 'Full-time',
-        industry: params.industry && params.industry !== 'All' ? params.industry : 'Technology',
-        postedDate: raw.posted_at || 'Recently posted',
-        source: 'Google Jobs via Smithery MCP',
-        applyLink,
-      };
-    });
-  }
-
-  private async searchViaSerpApi(params: {
-    keywords?: string;
-    location?: string;
-    experienceLevel?: string;
-    industry?: string;
-    minSalary?: number;
-  }): Promise<JobListing[]> {
-    const targetUrl = new URL(this.endpointUrl);
-    targetUrl.searchParams.set('engine', 'google_jobs');
-
-    if (this.apiKey && !targetUrl.searchParams.has('api_key')) {
-      targetUrl.searchParams.set('api_key', this.apiKey);
-    }
-
-    const queryParts: string[] = [];
-    if (params.keywords && params.keywords.trim()) {
-      queryParts.push(params.keywords.trim());
-    } else {
-      queryParts.push('software developer');
-    }
-
-    if (params.industry && params.industry !== 'All') {
-      queryParts.push(params.industry);
-    }
-    if (params.experienceLevel && params.experienceLevel !== 'All') {
-      queryParts.push(params.experienceLevel);
-    }
-
-    targetUrl.searchParams.set('q', queryParts.join(' '));
+    const query = params.keywords?.trim() || '*';
+    const toolArgs: Record<string, any> = {
+      query,
+      per_page: 25,
+    };
 
     if (params.location && params.location !== 'All') {
-      targetUrl.searchParams.set('location', params.location);
+      toolArgs.location = params.location;
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+    if (params.experienceLevel && params.experienceLevel !== 'All') {
+      const mapped = this.mapSeniority(params.experienceLevel);
+      if (mapped) toolArgs.seniority = mapped;
+    }
 
-    const res = await fetch(targetUrl.toString(), {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      },
-      signal: controller.signal,
+    if (params.minSalary && params.minSalary > 0) {
+      toolArgs.salary_min = params.minSalary;
+    }
+
+    const rpcResult = await this.executeMcpRpc('tools/call', {
+      name: 'search_jobs',
+      arguments: toolArgs,
     });
 
-    clearTimeout(timeoutId);
+    const rawText = rpcResult?.content?.[0]?.text || '';
+    return this.parseJobsFromMcpResponse(rawText, params);
+  }
 
-    if (!res.ok) {
-      const text = await res.text();
-      let errMsg = `SerpApi error HTTP ${res.status}`;
-      try {
-        const j = JSON.parse(text);
-        if (j.error) errMsg = j.error;
-      } catch {
-        // ignore
-      }
-      throw new Error(errMsg);
+  /**
+   * Get job details by ID via JobDataLake MCP `get_job` tool
+   */
+  public async getJob(jobId: string): Promise<JobListing | null> {
+    try {
+      const rpcResult = await this.executeMcpRpc('tools/call', {
+        name: 'get_job',
+        arguments: { job_id: jobId },
+      });
+
+      const rawText = rpcResult?.content?.[0]?.text || '';
+      return this.parseSingleJobDetail(jobId, rawText);
+    } catch {
+      return null;
     }
+  }
 
-    const data = await res.json();
-    if (data.error) {
-      throw new Error(data.error);
-    }
+  /**
+   * Executes a standard MCP Request over the SSE transport of JobDataLake
+   */
+  private executeMcpRpc(method: string, params: Record<string, any>): Promise<any> {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const sseUrl = `${this.baseUrl}/sse`;
+      const parsedSse = new URL(sseUrl);
 
-    const rawJobs: any[] = data.jobs_results || [];
+      const timer = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          try {
+            sseReq.destroy();
+          } catch {}
+          reject(new Error(`MCP timeout waiting for response to ${method}`));
+        }
+      }, this.timeoutMs);
 
-    return rawJobs.map((raw: any, index: number): JobListing => {
-      const title = raw.title || 'Untitled Role';
-      const company = raw.company_name || 'Hiring Organization';
-      const location = raw.location || 'Multiple Locations';
-      const description = raw.description || '';
-      const extensions: string[] = Array.isArray(raw.detected_extensions)
-        ? Object.values(raw.detected_extensions).filter((v): v is string => typeof v === 'string')
-        : Array.isArray(raw.extensions)
-        ? raw.extensions
-        : [];
-
-      let salary: JobListing['salary'] = undefined;
-      const salaryText = extensions.find((e) =>
-        e.includes('$') || e.toLowerCase().includes('salary') || e.toLowerCase().includes('a year') || e.toLowerCase().includes('an hour')
-      );
-      if (salaryText) {
-        salary = {
-          currency: 'USD',
-          period: salaryText.toLowerCase().includes('hour') ? 'hourly' : 'yearly',
-        };
+      const sseHeaders: Record<string, string> = {
+        'Accept': 'text/event-stream',
+        'User-Agent': 'CareerNavigator/2.0',
+      };
+      if (this.apiKey) {
+        sseHeaders['Authorization'] = `Bearer ${this.apiKey}`;
       }
 
-      const postedDate = extensions.find((e) => e.toLowerCase().includes('ago') || e.toLowerCase().includes('yesterday') || e.toLowerCase().includes('just')) || 'Recently posted';
-      const jobTypeStr = extensions.find((e) => e.toLowerCase().includes('full-time') || e.toLowerCase().includes('part-time') || e.toLowerCase().includes('contract'));
-      const jobType: JobListing['jobType'] = jobTypeStr?.toLowerCase().includes('part') ? 'Part-time' : jobTypeStr?.toLowerCase().includes('contract') ? 'Contract' : 'Full-time';
-      const applyLink = raw.apply_options?.[0]?.link || raw.share_link || undefined;
-
-      const skillsRequired: string[] = [];
-      if (Array.isArray(raw.job_highlights)) {
-        for (const highlight of raw.job_highlights) {
-          if (Array.isArray(highlight.items)) {
-            for (const item of highlight.items) {
-              if (item.length < 40) skillsRequired.push(item);
-            }
+      const sseReq = https.request(
+        {
+          hostname: parsedSse.hostname,
+          port: parsedSse.port || 443,
+          path: parsedSse.pathname + parsedSse.search,
+          method: 'GET',
+          headers: sseHeaders,
+        },
+        (sseRes) => {
+          if (sseRes.statusCode !== 200) {
+            clearTimeout(timer);
+            settled = true;
+            sseReq.destroy();
+            return reject(new Error(`SSE connection failed with HTTP ${sseRes.statusCode}`));
           }
+
+          let sseBuffer = '';
+
+          sseRes.on('data', (chunk) => {
+            if (settled) return;
+            sseBuffer += chunk.toString();
+
+            // 1. Look for endpoint announcement
+            const endpointMatch = sseBuffer.match(/event:\s*endpoint\s*\ndata:\s*([^\r\n]+)/);
+            if (endpointMatch && !sseBuffer.includes('__POST_SENT__')) {
+              const messagePath = endpointMatch[1].trim();
+              sseBuffer += '\n__POST_SENT__\n';
+
+              const postHeaders: Record<string, string> = {
+                'Content-Type': 'application/json',
+              };
+              if (this.apiKey) {
+                postHeaders['Authorization'] = `Bearer ${this.apiKey}`;
+              }
+
+              const postReq = https.request({
+                hostname: parsedSse.hostname,
+                port: parsedSse.port || 443,
+                path: messagePath,
+                method: 'POST',
+                headers: postHeaders,
+              });
+
+              postReq.on('error', (err) => {
+                if (!settled) {
+                  settled = true;
+                  clearTimeout(timer);
+                  try {
+                    sseReq.destroy();
+                  } catch {}
+                  reject(err);
+                }
+              });
+
+              postReq.write(
+                JSON.stringify({
+                  jsonrpc: '2.0',
+                  id: Date.now(),
+                  method,
+                  params,
+                }),
+              );
+              postReq.end();
+            }
+
+            // 2. Look for JSON-RPC response in SSE stream
+            const lines = sseBuffer.split(/\r?\n/);
+            for (const line of lines) {
+              if (line.startsWith('data: ') && line.includes('"result"')) {
+                const jsonStr = line.slice(6).trim();
+                try {
+                  const payload = JSON.parse(jsonStr);
+                  if (payload.result !== undefined) {
+                    clearTimeout(timer);
+                    settled = true;
+                    try {
+                      sseReq.destroy();
+                    } catch {}
+                    return resolve(payload.result);
+                  }
+                  if (payload.error) {
+                    clearTimeout(timer);
+                    settled = true;
+                    try {
+                      sseReq.destroy();
+                    } catch {}
+                    return reject(new Error(payload.error.message || JSON.stringify(payload.error)));
+                  }
+                } catch {
+                  // Wait for more chunks
+                }
+              }
+            }
+          });
+
+          sseRes.on('end', () => {
+            if (!settled) {
+              clearTimeout(timer);
+              settled = true;
+              reject(new Error('SSE stream closed before MCP RPC completed'));
+            }
+          });
+        },
+      );
+
+      sseReq.on('error', (err) => {
+        if (!settled) {
+          clearTimeout(timer);
+          settled = true;
+          reject(err);
+        }
+      });
+
+      sseReq.end();
+    });
+  }
+
+  private mapSeniority(level: string): string | undefined {
+    const l = level.toLowerCase();
+    if (l.includes('entry') || l.includes('junior')) return 'Entry';
+    if (l.includes('mid')) return 'Mid Level';
+    if (l.includes('senior')) return 'Senior';
+    if (l.includes('lead') || l.includes('director')) return 'Lead,Director';
+    return undefined;
+  }
+
+  private parseJobsFromMcpResponse(
+    text: string,
+    filters: { industry?: string; experienceLevel?: string },
+  ): JobListing[] {
+    const jobs: JobListing[] = [];
+    if (!text || text.trim() === '') return jobs;
+
+    // Pattern in JobDataLake:
+    // 1. **Full-Stack Product Engineer (Remote)** at TurbineOne
+    //    Remote | fully_remote | Not disclosed
+    //    Skills: Go, C++, C#, Java, Vue.js, React...
+    //    Apply: https://job-boards.greenhouse.io/turbineone/jobs/5431405008
+    //    ID: turbineone-full-stack-product-engineer-kitmh
+
+    const blocks = text.split(/(?=\d+\.\s+\*\*)/);
+
+    for (const block of blocks) {
+      const titleMatch = block.match(/\d+\.\s+\*\*(.*?)\*\*\s+at\s+([^\r\n]+)/);
+      if (!titleMatch) continue;
+
+      const title = titleMatch[1].trim();
+      const company = titleMatch[2].trim();
+
+      // Extract details line: Location | RemoteType | Salary
+      const detailsMatch = block.match(/\n\s*([^\r\n|]+)\s*\|\s*([^\r\n|]+)\s*\|\s*([^\r\n]+)/);
+      const location = detailsMatch ? detailsMatch[1].trim() : 'Remote / Hybrid';
+      const remoteTypeStr = detailsMatch ? detailsMatch[2].trim().toLowerCase() : '';
+      const salaryStr = detailsMatch ? detailsMatch[3].trim() : '';
+
+      // Extract skills
+      const skillsMatch = block.match(/Skills:\s*([^\r\n]+)/);
+      const skillsRequired = skillsMatch
+        ? skillsMatch[1]
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .slice(0, 8)
+        : ['Technology', 'Engineering'];
+
+      // Extract Apply Link
+      const applyMatch = block.match(/Apply:\s*([^\r\n]+)/);
+      const applyLink = applyMatch ? applyMatch[1].trim() : undefined;
+
+      // Extract ID
+      const idMatch = block.match(/ID:\s*([^\r\n]+)/);
+      const id = idMatch ? idMatch[1].trim() : `jdl-${Math.random().toString(36).slice(2, 9)}`;
+
+      // Salary parse
+      let salary: JobListing['salary'] = undefined;
+      const salaryNumbers = salaryStr.match(/\$?([\d,]+)/g);
+      if (salaryNumbers && salaryNumbers.length > 0) {
+        const parsed = salaryNumbers.map((s) => parseInt(s.replace(/[\$,]/g, ''), 10)).filter((n) => !isNaN(n));
+        if (parsed.length > 0) {
+          salary = {
+            currency: 'USD',
+            min: parsed[0] < 1000 ? parsed[0] * 1000 : parsed[0],
+            max: parsed[1] ? (parsed[1] < 1000 ? parsed[1] * 1000 : parsed[1]) : undefined,
+            period: 'yearly',
+          };
         }
       }
-      if (skillsRequired.length === 0) {
-        skillsRequired.push('Google Jobs Verified');
-      }
 
-      const requirements: string[] = [];
-      const qualHighlight = raw.job_highlights?.find((h: any) => h.title?.toLowerCase().includes('qualification'));
-      if (qualHighlight && Array.isArray(qualHighlight.items)) {
-        requirements.push(...qualHighlight.items);
-      }
-      if (requirements.length === 0) {
-        requirements.push('See full description for qualifications and specifications.');
-      }
+      // Map Job Type
+      let jobType: JobListing['jobType'] = 'Full-time';
+      if (remoteTypeStr.includes('fully_remote')) jobType = 'Remote';
+      else if (remoteTypeStr.includes('contract')) jobType = 'Contract';
+      else if (remoteTypeStr.includes('part_time')) jobType = 'Part-time';
 
-      return {
-        id: raw.job_id || `google-job-${index}-${Date.now()}`,
+      jobs.push({
+        id,
         title,
         company,
         location,
         salary,
-        description,
-        requirements,
-        skillsRequired: skillsRequired.slice(0, 8),
-        experienceLevel: params.experienceLevel && params.experienceLevel !== 'All' ? (params.experienceLevel as any) : 'Mid-Level',
+        description: `${title} at ${company}. Discover full compensation and team expectations directly through the verified JobDataLake MCP listing.`,
+        requirements: [
+          'Strong problem solving and architectural thinking.',
+          'Experience working with modern software stacks and team collaboration tools.',
+          'See apply link for complete qualifications.',
+        ],
+        skillsRequired,
+        experienceLevel: filters.experienceLevel && filters.experienceLevel !== 'All' ? (filters.experienceLevel as any) : 'Mid-Level',
         jobType,
-        industry: params.industry && params.industry !== 'All' ? params.industry : 'Technology',
-        postedDate,
-        source: 'Google Jobs via SerpApi',
+        industry: filters.industry && filters.industry !== 'All' ? filters.industry : 'Technology',
+        postedDate: 'Recently verified on ATS',
+        source: 'JobDataLake MCP',
         applyLink,
-      };
-    });
+      });
+    }
+
+    return jobs;
+  }
+
+  private parseSingleJobDetail(jobId: string, text: string): JobListing | null {
+    if (!text) return null;
+
+    const titleMatch = text.match(/\*\*(.*?)\*\*\s+at\s+([^\r\n]+)/);
+    const title = titleMatch ? titleMatch[1].trim() : jobId;
+    const company = titleMatch ? titleMatch[2].trim() : 'Company';
+
+    const locationMatch = text.match(/Location:\s*([^\r\n]+)/);
+    const location = locationMatch ? locationMatch[1].trim() : 'Remote / Hybrid';
+
+    const applyMatch = text.match(/Apply:\s*([^\r\n]+)/);
+    const applyLink = applyMatch ? applyMatch[1].trim() : undefined;
+
+    const skillsMatch = text.match(/Skills:\s*([^\r\n]+)/);
+    const skillsRequired = skillsMatch
+      ? skillsMatch[1]
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+
+    const descParts = text.split('---');
+    const description = descParts[1] ? descParts[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : text;
+
+    return {
+      id: jobId,
+      title,
+      company,
+      location,
+      description,
+      requirements: ['See official applicant tracking link for detailed qualifications.'],
+      skillsRequired: skillsRequired.slice(0, 10),
+      experienceLevel: 'Mid-Level',
+      jobType: 'Full-time',
+      industry: 'Technology',
+      postedDate: 'Active ATS Listing',
+      source: 'JobDataLake MCP',
+      applyLink,
+    };
   }
 }

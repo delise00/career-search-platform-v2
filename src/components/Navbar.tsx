@@ -30,11 +30,11 @@ export const Navbar: React.FC = () => {
             <div>
               <div className="flex items-center space-x-2">
                 <span className="font-bold text-lg tracking-tight text-white">Job Search</span>
-                <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">
-                  Google Jobs
+                <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
+                  JobDataLake
                 </span>
               </div>
-              <p className="text-xs text-slate-400">Powered by Google Jobs MCP Engine</p>
+              <p className="text-xs text-slate-400">Powered by JobDataLake MCP Server</p>
             </div>
           </div>
 

@@ -32,7 +32,7 @@ export const JobSearch: React.FC = () => {
   const [experienceFilter, setExperienceFilter] = useState('All');
   const [industryFilter, setIndustryFilter] = useState('All');
   const [searchWarning, setSearchWarning] = useState<string | null>(null);
-  const [searchSource, setSearchSource] = useState<string>('Google Jobs');
+  const [searchSource, setSearchSource] = useState<string>('JobDataLake MCP');
   const [activeJobModal, setActiveJobModal] = useState<JobListing | null>(null);
 
   const fetchJobs = async () => {
@@ -52,7 +52,7 @@ export const JobSearch: React.FC = () => {
         setSearchWarning(response.warning);
       }
     } catch (err: any) {
-      setSearchWarning(err.message || 'Google Jobs search is temporarily unavailable.');
+      setSearchWarning(err.message || 'Job search is temporarily unavailable.');
       setJobs([]);
     } finally {
       setIsLoading(false);

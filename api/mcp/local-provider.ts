@@ -1,22 +1,20 @@
 /**
- * Local Google Jobs Provider & Benchmark Fallback Engine
- * Serves verified job search listings when SerpApi Google Jobs is offline or no API key is provided.
+ * Benchmark fallback dataset & schema for JobDataLake MCP
  */
 
 import { JobListing, McpToolSchema } from './types.ts';
 
-// Benchmark Google Jobs Listings
 export const SAMPLE_JOBS_DATABASE: JobListing[] = [
   {
-    id: 'google-jobs-001',
+    id: 'jdl-001',
     title: 'Senior Frontend Engineer (React & TypeScript)',
     company: 'Grab',
     location: 'Singapore (Hybrid)',
     salary: {
-      currency: 'SGD',
-      min: 8500,
-      max: 12500,
-      period: 'monthly',
+      currency: 'USD',
+      min: 95000,
+      max: 145000,
+      period: 'yearly',
     },
     description: 'We are seeking an experienced Senior Frontend Engineer to build high-scale, resilient consumer and merchant web experiences. You will collaborate closely with product design and backend microservices engineers.',
     requirements: [
@@ -29,180 +27,142 @@ export const SAMPLE_JOBS_DATABASE: JobListing[] = [
     skillsRequired: ['React', 'TypeScript', 'Tailwind CSS', 'Performance Optimization', 'Jest/Vitest', 'REST/GraphQL', 'CI/CD'],
     experienceLevel: 'Senior',
     jobType: 'Full-time',
-    industry: 'Technology / E-commerce',
+    industry: 'Technology',
     postedDate: '2 days ago',
-    source: 'Google Jobs via SerpApi',
+    source: 'JobDataLake MCP',
     applyLink: 'https://careers.grab.com',
   },
   {
-    id: 'google-jobs-002',
-    title: 'Full Stack Developer',
-    company: 'DBS Bank',
-    location: 'Singapore (On-site)',
+    id: 'jdl-002',
+    title: 'Full Stack Software Engineer',
+    company: 'Versana',
+    location: 'New York, NY (Hybrid)',
     salary: {
-      currency: 'SGD',
-      min: 6500,
-      max: 9500,
-      period: 'monthly',
+      currency: 'USD',
+      min: 130000,
+      max: 180000,
+      period: 'yearly',
     },
-    description: 'Join DBS Digital Banking technology group. We are transforming digital financial products across Southeast Asia. You will architect and implement full-stack features from front-end journeys to secure microservices.',
+    description: 'Versana is an industry-backed technology company modernizing the syndicated loan market. We are seeking a motivated Full Stack Software Engineer to build resilient distributed services and clean web frontends.',
     requirements: [
-      'Degree in Computer Science, Software Engineering, or equivalent practical experience',
-      '3+ years of software development experience with React or Angular and Node.js or Java',
-      'Experience building and consuming secure RESTful APIs',
-      'Familiarity with relational databases (PostgreSQL/MySQL)',
-      'Knowledge of containerization (Docker) and Agile/Scrum delivery',
+      '3+ years of software development experience with React and Node.js or Java / Spring Boot',
+      'Experience building and consuming secure RESTful APIs and GraphQL',
+      'Familiarity with relational databases (PostgreSQL/MySQL) and Docker',
+      'Knowledge of agile delivery and automated testing',
     ],
     skillsRequired: ['React', 'Node.js', 'TypeScript', 'PostgreSQL', 'Docker', 'RESTful APIs', 'Git'],
     experienceLevel: 'Mid-Level',
     jobType: 'Full-time',
     industry: 'Banking / Fintech',
     postedDate: '3 days ago',
-    source: 'Google Jobs via SerpApi',
-    applyLink: 'https://www.dbs.com/careers',
+    source: 'JobDataLake MCP',
+    applyLink: 'https://jobs.lever.co/Versana',
   },
   {
-    id: 'google-jobs-003',
-    title: 'Data Analyst / Business Intelligence Specialist',
-    company: 'Shopee',
-    location: 'Singapore (Hybrid)',
+    id: 'jdl-003',
+    title: 'Full-Stack Product Engineer (Remote)',
+    company: 'TurbineOne',
+    location: 'Remote',
     salary: {
-      currency: 'SGD',
-      min: 5500,
-      max: 8500,
-      period: 'monthly',
+      currency: 'USD',
+      min: 140000,
+      max: 195000,
+      period: 'yearly',
     },
-    description: 'The Operations Data team is seeking a proactive Data Analyst to turn millions of data points into actionable insights for regional logistics and marketplace growth.',
+    description: 'Join TurbineOne to build frontline intelligence software. Looking for a product-minded Full-Stack Engineer comfortable across frontend, backend, and machine learning model delivery pipelines.',
     requirements: [
-      '2+ years of experience in data analytics, business intelligence, or quantitative analysis',
-      'Advanced SQL proficiency for complex data querying, joins, and aggregations',
-      'Demonstrated expertise in BI visualization tools such as Tableau or PowerBI',
-      'Proficiency in Python (Pandas, NumPy) for statistical analysis',
-      'Strong business acumen with ability to present findings clearly to stakeholders',
+      'Strong proficiency in modern JavaScript/TypeScript, React or Vue, and Go or Python backend',
+      'Experience with gRPC, GraphQL, or REST API architecture',
+      'Comfortable working in a remote-first, high-ownership team environment',
     ],
-    skillsRequired: ['SQL', 'Python', 'Tableau', 'PowerBI', 'Data Modeling', 'Business Analysis'],
+    skillsRequired: ['React', 'Go', 'Python', 'Machine Learning', 'GraphQL', 'Docker', 'Kubernetes'],
     experienceLevel: 'Mid-Level',
-    jobType: 'Full-time',
-    industry: 'E-commerce / Analytics',
+    jobType: 'Remote',
+    industry: 'Technology',
     postedDate: '1 day ago',
-    source: 'Google Jobs via SerpApi',
-    applyLink: 'https://careers.shopee.sg',
+    source: 'JobDataLake MCP',
+    applyLink: 'https://job-boards.greenhouse.io/turbineone',
   },
   {
-    id: 'google-jobs-004',
-    title: 'Product Manager (SaaS & Digital Solutions)',
-    company: 'Carousell Group',
-    location: 'Singapore (Hybrid)',
-    salary: {
-      currency: 'SGD',
-      min: 8000,
-      max: 12000,
-      period: 'monthly',
-    },
-    description: 'We are seeking a customer-obsessed Product Manager to lead the evolution of our seller platform. You will define product strategy, roadmap prioritization, and measure user adoption metrics.',
-    requirements: [
-      '3+ years of product management experience shipping digital products in SaaS or tech marketplaces',
-      'Strong ability to conduct user interviews, synthesize customer feedback, and write clear PRDs',
-      'Data-driven mindset with experience defining KPIs and running A/B experiments',
-      'Collaborative leader who bridges engineering, design, and operations',
-    ],
-    skillsRequired: ['Product Strategy', 'User Research', 'A/B Testing', 'Agile / Scrum', 'Roadmap Planning'],
-    experienceLevel: 'Mid-Level',
-    jobType: 'Full-time',
-    industry: 'Consumer Internet / SaaS',
-    postedDate: '4 days ago',
-    source: 'Google Jobs via SerpApi',
-    applyLink: 'https://careers.carousell.com',
-  },
-  {
-    id: 'google-jobs-005',
-    title: 'Junior Cloud & DevOps Associate',
-    company: 'GovTech',
+    id: 'jdl-004',
+    title: 'AI / Machine Learning Engineer',
+    company: 'GovTech Singapore',
     location: 'Singapore (On-site)',
     salary: {
-      currency: 'SGD',
-      min: 4800,
-      max: 6800,
-      period: 'monthly',
+      currency: 'USD',
+      min: 110000,
+      max: 165000,
+      period: 'yearly',
     },
-    description: 'Support cloud infrastructure, automated CI/CD deployment pipelines, and observability monitoring across public sector digital services.',
+    description: 'Design and deploy production-grade LLM applications and machine learning pipelines for public sector impact. You will architect retrieval-augmented generation (RAG) systems and evaluate foundation models.',
     requirements: [
-      'Diploma or Degree in Infocomm Technology, Computer Engineering, or related discipline',
-      'Foundational understanding of Linux server administration and shell scripting',
-      'Basic knowledge of containerization with Docker and cloud providers (AWS, Azure, or GCP)',
-      'Familiarity with version control using Git and CI/CD pipelines',
+      'Mastery of Python, PyTorch, and transformer architectures',
+      'Hands-on experience deploying embeddings, vector search databases, and RAG systems',
+      'Familiarity with containerized microservices and Kubernetes orchestration',
     ],
-    skillsRequired: ['Linux', 'Docker', 'Git', 'AWS / Cloud', 'Bash', 'CI/CD Basics'],
-    experienceLevel: 'Entry / Junior',
+    skillsRequired: ['Python', 'PyTorch', 'Vector DBs', 'RAG', 'LLMs', 'Docker', 'FastAPI'],
+    experienceLevel: 'Senior',
     jobType: 'Full-time',
-    industry: 'Public Sector / GovTech',
-    postedDate: '5 days ago',
-    source: 'Google Jobs via SerpApi',
+    industry: 'Technology',
+    postedDate: 'Just now',
+    source: 'JobDataLake MCP',
     applyLink: 'https://www.tech.gov.sg/careers',
   },
   {
-    id: 'google-jobs-006',
-    title: 'Cybersecurity Analyst (SOC / Threat Detection)',
-    company: 'Singtel',
-    location: 'Singapore (On-site)',
+    id: 'jdl-005',
+    title: 'Cloud DevOps & Platform Engineer',
+    company: 'Stripe',
+    location: 'Remote (US/SG)',
     salary: {
-      currency: 'SGD',
-      min: 6000,
-      max: 9000,
-      period: 'monthly',
+      currency: 'USD',
+      min: 150000,
+      max: 210000,
+      period: 'yearly',
     },
-    description: 'Monitor SIEM alerts, perform incident triage, and analyze malware indicators to protect critical digital infrastructure against advanced threats.',
+    description: 'Help scale global infrastructure powering billions of dollars in daily transactions. You will build internal developer platforms, improve telemetry, and harden security boundaries.',
     requirements: [
-      '2+ years in Security Operations Center (SOC) triage or network security monitoring',
-      'Hands-on experience with SIEM platforms (Splunk, Microsoft Sentinel, or Elastic)',
-      'Knowledge of TCP/IP networking, firewalls, and EDR agents',
-      'Relevant certification such as CompTIA Security+ is an advantage',
+      'Experience with AWS, GCP, or Azure infrastructure at scale',
+      'Deep knowledge of Kubernetes, Terraform, and GitOps workflows',
+      'Proficiency in Go, Python, or Ruby for infrastructure tooling',
     ],
-    skillsRequired: ['SIEM (Splunk)', 'Incident Response', 'Network Security', 'SOC Operations', 'Threat Analysis'],
-    experienceLevel: 'Mid-Level',
-    jobType: 'Full-time',
-    industry: 'Telecommunications / Cyber Security',
-    postedDate: 'Just now',
-    source: 'Google Jobs via SerpApi',
-    applyLink: 'https://www.singtel.com/about-us/careers',
+    skillsRequired: ['Kubernetes', 'Terraform', 'AWS', 'Go', 'CI/CD', 'Docker', 'Prometheus'],
+    experienceLevel: 'Senior',
+    jobType: 'Remote',
+    industry: 'Banking / Fintech',
+    postedDate: '4 days ago',
+    source: 'JobDataLake MCP',
+    applyLink: 'https://stripe.com/jobs',
   },
 ];
 
-/**
- * Tools Schemas for Google Jobs Search
- */
-export const GOOGLE_JOBS_TOOL_SCHEMAS: McpToolSchema[] = [
+export const JOBDATALAKE_FALLBACK_TOOLS: McpToolSchema[] = [
   {
-    name: 'google_jobs_search',
-    description: 'Search available Google Jobs listings with query, location, and parameters using SerpApi.',
+    name: 'search_jobs',
+    description: 'Search 1M+ job listings with keyword, location, seniority, and salary filters.',
     inputSchema: {
       type: 'object',
       properties: {
-        keywords: { type: 'string', description: 'Search query for role title, company, or skills' },
-        location: { type: 'string', description: 'Geographic location or Remote' },
-        experienceLevel: { type: 'string', description: 'Entry / Junior, Mid-Level, Senior, Lead' },
-        industry: { type: 'string', description: 'Industry vertical' },
-        minSalary: { type: 'number', description: 'Minimum monthly salary' },
+        query: { type: 'string' },
+        location: { type: 'string' },
+        seniority: { type: 'string' },
+        salary_min: { type: 'number' },
       },
     },
   },
   {
-    name: 'google_jobs_get_details',
-    description: 'Fetch detailed requirements, compensation, and apply links for a specific job ID.',
+    name: 'get_job',
+    description: 'Get full details for a specific job listing.',
     inputSchema: {
       type: 'object',
       properties: {
-        jobId: { type: 'string', description: 'Unique job identifier' },
+        job_id: { type: 'string' },
       },
-      required: ['jobId'],
+      required: ['job_id'],
     },
   },
 ];
 
 export class LocalMcpFallbackEngine {
-  /**
-   * Search jobs adhering to Google Jobs schema
-   */
   public static async searchJobs(params: {
     keywords?: string;
     location?: string;
@@ -248,9 +208,6 @@ export class LocalMcpFallbackEngine {
     return results;
   }
 
-  /**
-   * Get job by ID adhering to Google Jobs schema
-   */
   public static async getJobDetails(jobId: string): Promise<JobListing | null> {
     const job = SAMPLE_JOBS_DATABASE.find((j) => j.id === jobId);
     return job || null;
