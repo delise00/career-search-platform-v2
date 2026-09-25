@@ -1,0 +1,6 @@
+{
+  "name": "Career Navigator - AI & MCP Powered Job Platform",
+  "description": "Discover career opportunities, analyze resume suitability, optimize job applications, and prepare for interviews using MCP tools and Skills Framework alignment.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
